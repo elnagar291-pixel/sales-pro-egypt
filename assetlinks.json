@@ -1,8 +1,0 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "io.github.elnagar291_pixel.twa",
-        "sha256_cert_fingerprints": ["1B:8D:ED:5E:AB:63:80:5A:90:F9:AB:32:0A:31:66:87:0F:C5:23:AF:39:1C:61:22:5E:42:0B:31:54:36:B3:70"]
-      }
-    }]
