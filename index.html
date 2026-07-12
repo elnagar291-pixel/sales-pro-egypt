@@ -12,6 +12,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --paper:#F6F3EC;
@@ -147,6 +149,7 @@
     background:var(--card); font-family:'Tajawal'; font-size:14.5px; color:var(--ink);
   }
   textarea{ resize:vertical; min-height:60px; }
+  .item-name-select, .item-name-select option{ font-size:12px; }
   .item-row{ display:flex; gap:8px; margin-bottom:8px; align-items:center;}
   .item-row input{ flex:1; }
   .item-row .qty{ flex:0 0 55px; }
@@ -233,6 +236,8 @@
   </div>
   <div class="section" id="inventorySection">
     <button class="add-item" id="addItemStockBtn" style="margin-bottom:12px;">+ إضافة صنف للمخزون</button>
+    <button class="add-item" id="importExcelBtn" style="margin-bottom:12px; background:var(--paid-soft); border-color:var(--paid); color:var(--paid);">📥 تحديث الرصيد من ملف Excel</button>
+    <input type="file" id="importExcelInput" accept=".xlsx,.xls,.csv" style="display:none;">
     <label style="margin:0 0 5px;">بحث</label>
     <input type="text" id="stockSearchInput" placeholder="اكتب اسم الصنف..." style="margin-bottom:12px;">
     <div id="inventoryList" class="loading">جارِ التحميل…</div>
@@ -265,6 +270,16 @@
       <div id="custDetailAddress"></div>
     </div>
     <div class="meta" id="noCustomersHint" style="display:none; margin-top:6px;">لا يوجد عملاء مسجّلين — سجّل عميل أولًا من تبويب "العملاء"</div>
+
+    <label>تاريخ الفاتورة</label>
+    <input type="date" id="invDate">
+
+    <label>أجل السداد</label>
+    <select id="invPaymentTerm">
+      <option value="0">فوري (بدون أجل)</option>
+      <option value="30">30 يوم</option>
+      <option value="60">60 يوم</option>
+    </select>
 
     <label>الأصناف</label>
     <div id="itemsWrap"></div>
@@ -316,23 +331,34 @@
     <label>اسم الصنف</label>
     <input type="text" id="stockName" placeholder="مثال: زيت عباد الشمس 1 لتر">
 
-    <label>الباركود (اختياري)</label>
+    <label>كود الصنف بالمخزن (اختياري)</label>
+    <input type="text" id="stockItemCode" placeholder="مثال: 51601001">
+
+    <label>الباركود (اختياري - لمسح المنتج بالكاميرا)</label>
     <div style="display:flex; gap:8px;">
       <input type="text" id="stockBarcode" placeholder="امسح الباركود أو اكتبه يدويًا" style="flex:1;">
       <button class="rm-btn" id="scanBarcodeBtn" style="background:var(--ledger); color:#fff; border-radius:10px; padding:0 16px; font-size:20px; flex-shrink:0;">📷</button>
     </div>
 
-    <label>السعر</label>
+    <label>سعر القطعة الواحدة</label>
     <input type="number" id="stockPrice" placeholder="0" min="0">
 
-    <label>الكمية المتاحة</label>
-    <input type="number" id="stockQty" placeholder="0" min="0">
+    <label>عدد القطع في الكرتونة (اختياري)</label>
+    <input type="number" id="stockUnitsPerCarton" placeholder="مثال: 12" min="0">
+    <div class="meta" id="cartonPriceHint" style="margin-top:4px;"></div>
 
-    <label>حد التنبيه (تنبيهك لما الكمية توصل له)</label>
+    <label>الرصيد بالقطعة</label>
+    <input type="number" id="stockPieceQty" placeholder="0" min="0">
+
+    <label>الرصيد بالكرتونة</label>
+    <input type="number" id="stockCartonQty" placeholder="0" min="0">
+
+    <label>حد التنبيه (تنبيهك لما إجمالي القطع يوصل له)</label>
     <input type="number" id="stockAlertThreshold" placeholder="مثال: 5" min="0">
 
     <button class="btn-primary" id="saveStockBtn">حفظ الصنف</button>
     <button class="btn-secondary" id="cancelStockBtn">إلغاء</button>
+    <button class="btn-secondary" id="deleteStockFormBtn" style="display:none; color:var(--due); border-color:var(--due);">🗑️ حذف الصنف</button>
   </div>
 </div>
 
@@ -413,11 +439,24 @@
       <label>تصدير البيانات</label>
       <button class="btn-secondary" id="exportExcelBtn">📊 تصدير الفواتير إلى Excel (CSV)</button>
     </div>
+
+    <div style="border-top:1px solid var(--line); margin-top:20px; padding-top:16px;">
+      <label style="margin-top:0;">☁️ المزامنة التلقائية مع Google Drive</label>
+      <div class="meta" id="driveStatus">غير متصل</div>
+      <div class="meta" id="driveLastBackup"></div>
+
+      <label>Google Client ID (من Google Cloud Console)</label>
+      <input type="text" id="googleClientIdInput" placeholder="الصق الـ Client ID هنا">
+
+      <button class="btn-secondary" id="connectDriveBtn" style="margin-top:10px;">🔗 ربط / تسجيل الدخول بـ Google Drive</button>
+      <button class="btn-secondary" id="backupNowBtn">☁️ نسخة احتياطية الآن</button>
+      <button class="btn-secondary" id="restoreFromDriveBtn">⬇️ استرجاع من Drive</button>
+    </div>
   </div>
 </div>
 
 <!-- Hidden invoice print template (used to render PDF) -->
-<div id="printTemplate" style="position:fixed; left:-9999px; top:0; width:700px; background:#fff; padding:40px; font-family:'Tajawal', sans-serif; direction:rtl; color:#22302B;"></div>
+<div id="printTemplate" style="position:fixed; left:-9999px; top:0; width:700px; min-height:1040px; background:#fff; padding:40px; font-family:'Tajawal', sans-serif; direction:rtl; color:#22302B; box-sizing:border-box;"></div>
 
 <script>
 const fmt = n => new Intl.NumberFormat('en-US').format(Math.round(n*100)/100);
@@ -425,7 +464,7 @@ let invoices = [];
 let customers = [];
 let inventory = [];
 let collections = [];
-let settings = { companyName:'', companyPhone:'', companyAddress:'', companyLogo:'', theme:'light', language:'ar', invoiceCounter:0 };
+let settings = { companyName:'ابو داوود للتوريدات', companyPhone:'', companyAddress:'', companyLogo:'', theme:'light', language:'ar', invoiceCounter:0, googleClientId:'', driveFileId:'', lastBackupAt:'' };
 let loaded = false;
 
 const translations = {
@@ -492,11 +531,22 @@ async function loadData(){
   applyLanguage();
   loaded = true;
   render();
+
+  // try to silently reconnect to Google Drive if previously linked
+  if(settings.googleClientId){
+    setTimeout(async ()=>{
+      if(initGoogleClient()){
+        const ok = await ensureValidToken(false);
+        if(ok) driveInitialSyncCheck();
+      }
+    }, 800);
+  }
 }
 
 async function saveData(){
   try{
     localStorage.setItem('ledger_invoices', JSON.stringify(invoices));
+    scheduleAutoBackup();
   }catch(e){
     console.error('فشل الحفظ', e);
     alert('حصلت مشكلة في حفظ البيانات، جرب تاني.');
@@ -506,6 +556,7 @@ async function saveData(){
 async function saveCustomers(){
   try{
     localStorage.setItem('ledger_customers', JSON.stringify(customers));
+    scheduleAutoBackup();
   }catch(e){
     console.error('فشل الحفظ', e);
     alert('حصلت مشكلة في حفظ البيانات، جرب تاني.');
@@ -515,6 +566,7 @@ async function saveCustomers(){
 async function saveInventory(){
   try{
     localStorage.setItem('ledger_inventory', JSON.stringify(inventory));
+    scheduleAutoBackup();
   }catch(e){
     console.error('فشل الحفظ', e);
     alert('حصلت مشكلة في حفظ البيانات، جرب تاني.');
@@ -524,6 +576,7 @@ async function saveInventory(){
 async function saveCollections(){
   try{
     localStorage.setItem('ledger_collections', JSON.stringify(collections));
+    scheduleAutoBackup();
   }catch(e){
     console.error('فشل الحفظ', e);
     alert('حصلت مشكلة في حفظ البيانات، جرب تاني.');
@@ -555,25 +608,27 @@ document.querySelectorAll('.tab').forEach(t=>{
 const invoiceOverlay = document.getElementById('invoiceOverlay');
 const itemsWrap = document.getElementById('itemsWrap');
 
-function addItemRow(name='', qty=1, price='', discountPct=0){
+function addItemRow(name='', qty=1, price='', discountPct=0, unit='piece'){
   const row = document.createElement('div');
   row.className = 'item-row-wrap';
   row.style.marginBottom = '10px';
   row.style.paddingBottom = '10px';
   row.style.borderBottom = '1px dashed var(--line)';
 
-  const options = inventory.map(it=>`<option value="${it.name}" data-price="${it.price}">${it.name} — ${fmt(it.price)} (متاح ${fmt(it.qty)})</option>`).join('');
-  const isKnownItem = inventory.some(it=>it.name===name);
   const discountOptions = [0,1,2,3,4,5,10,15,20,25,30]
     .map(p=>`<option value="${p}">${p===0?'بدون خصم':'خصم '+p+'%'}</option>`).join('');
 
   row.innerHTML = `
-    <select class="item-name-select">
-      <option value="">— اختر صنف من المخزون —</option>
-      ${options}
-      <option value="__custom__">✏️ صنف يدوي (غير مسجل بالمخزون)</option>
+    <div style="position:relative;">
+      <input type="text" class="item-name-select" placeholder="اكتب اسم الصنف أو اضغط السهم لعرض الكل" autocomplete="off" value="${name}" style="padding-left:38px;">
+      <button type="button" class="combo-arrow" style="position:absolute; left:6px; top:6px; bottom:6px; width:28px; background:none; border:none; color:var(--ink-soft); font-size:14px; cursor:pointer;">▾</button>
+      <div class="combo-list" style="display:none; position:absolute; z-index:30; background:var(--card); border:1px solid var(--line); border-radius:10px; max-height:240px; overflow-y:auto; width:100%; margin-top:4px; box-shadow:0 6px 18px rgba(0,0,0,.18);"></div>
+    </div>
+    <div class="item-match-hint meta" style="margin-top:4px;"></div>
+    <select class="unit-select" style="display:none; margin-top:6px;">
+      <option value="piece">بالقطعة</option>
+      <option value="carton">بالكرتونة</option>
     </select>
-    <input type="text" class="item-name-custom" placeholder="اكتب اسم الصنف" style="display:none; margin-top:6px;">
     <div class="item-row" style="margin-top:6px;">
       <input type="number" class="qty" placeholder="عدد" min="1" value="${qty}">
       <input type="number" class="price" placeholder="سعر" min="0" value="${price}">
@@ -585,45 +640,114 @@ function addItemRow(name='', qty=1, price='', discountPct=0){
     </div>
   `;
 
-  const select = row.querySelector('.item-name-select');
-  const customInput = row.querySelector('.item-name-custom');
+  const nameInput = row.querySelector('.item-name-select');
+  const comboArrow = row.querySelector('.combo-arrow');
+  const comboList = row.querySelector('.combo-list');
+  const hint = row.querySelector('.item-match-hint');
+  const unitSelect = row.querySelector('.unit-select');
   const priceInput = row.querySelector('.price');
   const discountSelect = row.querySelector('.discount');
   discountSelect.value = discountPct;
+  unitSelect.value = unit;
 
-  if(name && isKnownItem){
-    select.value = name;
-  }else if(name){
-    select.value = '__custom__';
-    customInput.style.display = 'block';
-    customInput.value = name;
+  function findMatch(){
+    const val = nameInput.value.trim().toLowerCase();
+    if(!val) return null;
+    return inventory.find(it=>it.name.trim().toLowerCase()===val) || null;
   }
 
-  select.addEventListener('change', ()=>{
-    if(select.value === '__custom__'){
-      customInput.style.display = 'block';
-      customInput.value = '';
-      customInput.focus();
+  function applyUnitPrice(match){
+    if(!match) return;
+    const upc = match.unitsPerCarton||0;
+    priceInput.value = unitSelect.value==='carton' ? (match.price*upc) : match.price;
+  }
+
+  function renderComboList(filterText){
+    const q = (filterText||'').trim().toLowerCase();
+    const matches = q ? inventory.filter(it=>it.name.toLowerCase().includes(q)) : inventory;
+    if(matches.length===0){
+      comboList.innerHTML = `<div style="padding:12px; color:var(--ink-soft); font-size:13px;">لا يوجد صنف بهذا الاسم</div>`;
     }else{
-      customInput.style.display = 'none';
-      const opt = select.selectedOptions[0];
-      const p = opt ? opt.dataset.price : null;
-      if(p !== undefined && p !== null && p !== '') priceInput.value = p;
+      comboList.innerHTML = matches.map(it=>{
+        const pieceQty = it.pieceQty!==undefined ? it.pieceQty : (it.qty||0);
+        const cartonQty = it.cartonQty||0;
+        let availText = fmt(pieceQty)+'ق';
+        if(cartonQty>0) availText += '/'+fmt(cartonQty)+'كرت';
+        return `<div class="combo-item" data-name="${it.name.replace(/"/g,'&quot;')}" style="padding:10px 12px; border-bottom:1px solid var(--line); font-size:13px; cursor:pointer;">${it.name} <span style="color:var(--ink-soft); font-size:11.5px;">— ${fmt(it.price)} (${availText})</span></div>`;
+      }).join('');
+    }
+    comboList.querySelectorAll('.combo-item').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        nameInput.value = el.dataset.name;
+        comboList.style.display = 'none';
+        refreshMatch();
+      });
+    });
+  }
+
+  function refreshMatch(){
+    const match = findMatch();
+    if(match){
+      const pieceQty = match.pieceQty!==undefined ? match.pieceQty : (match.qty||0);
+      const cartonQty = match.cartonQty||0;
+      let availText = fmt(pieceQty)+' قطعة';
+      if(cartonQty>0) availText += ' / '+fmt(cartonQty)+' كرتونة';
+      hint.textContent = `✅ متاح: ${availText}`;
+      hint.style.color = 'var(--paid)';
+      unitSelect.style.display = match.unitsPerCarton>0 ? 'block' : 'none';
+      if(match.unitsPerCarton<=0) unitSelect.value = 'piece';
+      applyUnitPrice(match);
+    }else if(nameInput.value.trim()){
+      hint.textContent = 'صنف يدوي (غير مسجل بالمخزون)';
+      hint.style.color = 'var(--ink-soft)';
+      unitSelect.style.display = 'none';
+      unitSelect.value = 'piece';
+    }else{
+      hint.textContent = '';
+      unitSelect.style.display = 'none';
+      unitSelect.value = 'piece';
     }
     updateTotal();
+  }
+
+  nameInput.addEventListener('input', ()=>{
+    renderComboList(nameInput.value);
+    comboList.style.display = 'block';
+    refreshMatch();
   });
-  customInput.addEventListener('input', updateTotal);
+  nameInput.addEventListener('focus', ()=>{
+    renderComboList(nameInput.value);
+    comboList.style.display = 'block';
+  });
+  comboArrow.addEventListener('click', ()=>{
+    if(comboList.style.display === 'block'){
+      comboList.style.display = 'none';
+    }else{
+      renderComboList('');
+      comboList.style.display = 'block';
+      nameInput.focus();
+    }
+  });
+  document.addEventListener('click', (e)=>{
+    if(!row.contains(e.target)) comboList.style.display = 'none';
+  });
+
+  unitSelect.addEventListener('change', ()=>{ applyUnitPrice(findMatch()); updateTotal(); });
   discountSelect.addEventListener('change', updateTotal);
   row.querySelectorAll('.item-row input').forEach(i=>i.addEventListener('input', updateTotal));
   row.querySelector('.rm-btn').addEventListener('click', ()=>{ row.remove(); updateTotal(); });
   itemsWrap.appendChild(row);
-  updateTotal();
+
+  refreshMatch();
 }
 
 function getItemRowName(row){
-  const select = row.querySelector('.item-name-select');
-  if(select.value === '__custom__') return row.querySelector('.item-name-custom').value.trim();
-  return select.value;
+  return row.querySelector('.item-name-select').value.trim();
+}
+
+function getItemRowUnit(row){
+  const unitSelect = row.querySelector('.unit-select');
+  return unitSelect.style.display!=='none' ? unitSelect.value : 'piece';
 }
 
 function updateTotal(){
@@ -648,6 +772,8 @@ document.getElementById('cancelInvoiceBtn').addEventListener('click', ()=>invoic
 
 function openInvoiceForm(){
   document.getElementById('invNotes').value='';
+  document.getElementById('invDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('invPaymentTerm').value = '0';
   itemsWrap.innerHTML='';
   addItemRow();
   updateTotal();
@@ -684,9 +810,10 @@ document.getElementById('saveInvoiceBtn').addEventListener('click', async ()=>{
     const qty = parseFloat(row.querySelector('.qty').value)||0;
     const price = parseFloat(row.querySelector('.price').value)||0;
     const discountPct = parseFloat(row.querySelector('.discount').value)||0;
+    const unit = getItemRowUnit(row);
     if(name && qty>0){
       const lineTotal = qty*price*(1-discountPct/100);
-      items.push({name, qty, price, discountPct, lineTotal});
+      items.push({name, qty, price, discountPct, lineTotal, unit});
     }
   });
   if(items.length===0){ alert('أضف صنف واحد على الأقل'); return; }
@@ -694,6 +821,16 @@ document.getElementById('saveInvoiceBtn').addEventListener('click', async ()=>{
 
   settings.invoiceCounter = (settings.invoiceCounter||0) + 1;
   await saveSettings();
+
+  const invDateValue = document.getElementById('invDate').value || new Date().toISOString().slice(0,10);
+  const invoiceDateISO = new Date(invDateValue+'T12:00:00').toISOString();
+  const paymentTermDays = parseInt(document.getElementById('invPaymentTerm').value)||0;
+  let dueDateISO = null;
+  if(paymentTermDays>0){
+    const d = new Date(invDateValue+'T12:00:00');
+    d.setDate(d.getDate()+paymentTermDays);
+    dueDateISO = d.toISOString();
+  }
 
   const invoice = {
     id: uid(),
@@ -705,18 +842,24 @@ document.getElementById('saveInvoiceBtn').addEventListener('click', async ()=>{
     sapCode: customerRecord.sapCode,
     notes, items, total,
     paid: 0,
-    date: new Date().toISOString(),
+    date: invoiceDateISO,
+    paymentTermDays, dueDate: dueDateISO,
     payments: []
   };
   invoices.unshift(invoice);
   await saveData();
 
-  // decrement matching inventory stock
+  // decrement matching inventory stock (from the correct bucket: pieces or cartons)
   let stockChanged = false;
   items.forEach(soldItem=>{
     const stockItem = inventory.find(it=>it.name===soldItem.name);
     if(stockItem){
-      stockItem.qty = Math.max(0, stockItem.qty - soldItem.qty);
+      if(soldItem.unit==='carton'){
+        stockItem.cartonQty = Math.max(0, (stockItem.cartonQty||0) - soldItem.qty);
+      }else{
+        stockItem.pieceQty = Math.max(0, (stockItem.pieceQty!==undefined?stockItem.pieceQty:stockItem.qty||0) - soldItem.qty);
+      }
+      stockItem.qty = (stockItem.pieceQty||0) + (stockItem.cartonQty||0)*(stockItem.unitsPerCarton||0);
       stockChanged = true;
     }
   });
@@ -740,11 +883,12 @@ function openDetail(invId){
     ${inv.phone ? `<div class="meta">📞 ${inv.phone}</div>` : ''}
     ${inv.sapCode ? `<div class="meta">كود العميل: ${inv.sapCode}</div>` : ''}
     ${inv.address ? `<div class="meta">📍 ${inv.address}</div>` : ''}
-    <div class="meta">${new Date(inv.date).toLocaleDateString('en-GB')}</div>
+    <div class="meta">تاريخ الفاتورة: ${new Date(inv.date).toLocaleDateString('en-GB')}</div>
+    ${inv.dueDate ? `<div class="meta" style="color:var(--due); font-weight:700;">تاريخ الاستحقاق: ${new Date(inv.dueDate).toLocaleDateString('en-GB')}</div>` : ''}
     <div style="margin-top:14px; border-top:1px solid var(--line); padding-top:10px;">
       ${inv.items.map(it=>`
         <div class="row" style="margin-bottom:6px; font-size:14px;">
-          <span>${it.name} × ${it.qty}${it.discountPct>0 ? ' (خصم '+it.discountPct+'%)' : ''}</span>
+          <span>${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.discountPct>0 ? ' (خصم '+it.discountPct+'%)' : ''}</span>
           <span>${fmt(it.lineTotal!==undefined ? it.lineTotal : it.qty*it.price)}</span>
         </div>
       `).join('')}
@@ -817,32 +961,39 @@ async function shareInvoicePdf(inv){
     const totalDiscount = inv.items.reduce((s,it)=>s+((it.qty*it.price) - (it.lineTotal!==undefined?it.lineTotal:it.qty*it.price)),0);
     const tpl = document.getElementById('printTemplate');
     tpl.innerHTML = `
-      <div style="text-align:center; border-bottom:3px solid #1F5C4F; padding-bottom:20px; margin-bottom:24px;">
-        ${settings.companyLogo ? `<img src="${settings.companyLogo}" style="height:60px; margin-bottom:10px;">` : ''}
-        ${settings.companyName ? `<div style="font-size:24px; font-weight:800;">${settings.companyName}</div>` : ''}
-        ${settings.companyPhone ? `<div style="font-size:14px; color:#5B6B63; margin-top:4px;">موبايل: ${settings.companyPhone}</div>` : ''}
-        ${settings.companyAddress ? `<div style="font-size:14px; color:#5B6B63; margin-top:2px;">العنوان: ${settings.companyAddress}</div>` : ''}
-        <div style="font-size:26px; font-weight:800; color:#1F5C4F; margin-top:14px;">فاتورة بيع${inv.number!==undefined ? ' رقم #'+inv.number : ''}</div>
-        <div style="font-size:14px; color:#5B6B63; margin-top:6px;">${new Date(inv.date).toLocaleDateString('en-GB')}</div>
+      <div style="position:relative; text-align:center; border-bottom:3px solid #1F5C4F; padding-bottom:16px; margin-bottom:20px;">
+        ${settings.companyLogo ? `<img src="${settings.companyLogo}" style="position:absolute; top:0; left:0; height:42px; max-width:130px; object-fit:contain;">` : ''}
+        <div style="font-size:24px; font-weight:800;">${settings.companyName || 'اسم الشركة'}</div>
+        <div style="font-size:14px; color:#5B6B63; margin-top:4px;">فاتورة بيع</div>
       </div>
-      <div style="margin-bottom:20px; background:#F6F3EC; border-radius:10px; padding:16px 18px;">
-        <div style="font-size:19px; font-weight:700;">العميل: ${inv.customer}</div>
-        ${inv.phone ? `<div style="font-size:14.5px; color:#5B6B63; margin-top:5px;">موبايل: ${inv.phone}</div>` : ''}
-        ${inv.sapCode ? `<div style="font-size:14.5px; color:#5B6B63; margin-top:3px;">كود العميل: ${inv.sapCode}</div>` : ''}
-        ${inv.address ? `<div style="font-size:14.5px; color:#5B6B63; margin-top:3px;">العنوان: ${inv.address}</div>` : ''}
+      <div style="display:flex; justify-content:space-between; gap:14px; margin-bottom:20px;">
+        <div style="flex:1; background:#F6F3EC; border-radius:10px; padding:14px 16px;">
+          <div style="font-size:17px; font-weight:700;">العميل: ${inv.customer}</div>
+          <div style="font-size:13.5px; color:#5B6B63; margin-top:6px;">تاريخ الفاتورة: ${new Date(inv.date).toLocaleDateString('en-GB')}</div>
+          ${inv.dueDate ? `<div style="font-size:13.5px; color:#B5542A; font-weight:700; margin-top:3px;">تاريخ الاستحقاق: ${new Date(inv.dueDate).toLocaleDateString('en-GB')}</div>` : ''}
+        </div>
+        <div style="flex:1; text-align:left; padding:14px 16px;">
+          <div style="font-size:15px; font-weight:700; color:#1F5C4F;">فاتورة رقم #${inv.number!==undefined ? inv.number : ''}</div>
+          ${inv.phone ? `<div style="font-size:13px; color:#5B6B63; margin-top:6px;">موبايل: ${inv.phone}</div>` : ''}
+          ${inv.sapCode ? `<div style="font-size:13px; color:#5B6B63; margin-top:3px;">كود العميل: ${inv.sapCode}</div>` : ''}
+          ${inv.address ? `<div style="font-size:13px; color:#5B6B63; margin-top:3px;">العنوان: ${inv.address}</div>` : ''}
+        </div>
       </div>
       <div style="border-top:1px solid #D8D2C2; border-bottom:1px solid #D8D2C2; padding:14px 0; margin-bottom:20px;">
         <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:#5B6B63; margin-bottom:10px;">
           <span style="flex:2;">الصنف</span>
+          <span style="flex:1; text-align:center;">السعر قبل الخصم</span>
           <span style="flex:1; text-align:center;">الخصم</span>
           <span style="flex:1; text-align:left;">الإجمالي بعد الخصم</span>
         </div>
         ${inv.items.map(it=>{
-          const lineTotal = it.lineTotal!==undefined ? it.lineTotal : it.qty*it.price;
+          const subtotal = it.qty*it.price;
+          const lineTotal = it.lineTotal!==undefined ? it.lineTotal : subtotal;
           const discountPct = it.discountPct || 0;
           return `
           <div style="display:flex; justify-content:space-between; font-size:15px; margin-bottom:10px;">
-            <span style="flex:2;">${it.name} × ${it.qty}</span>
+            <span style="flex:2;">${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}</span>
+            <span style="flex:1; text-align:center; color:#5B6B63;">${fmt(subtotal)}</span>
             <span style="flex:1; text-align:center; color:${discountPct>0?'#B5542A':'#5B6B63'};">${discountPct>0 ? discountPct+'%' : '—'}</span>
             <span style="flex:1; text-align:left; font-weight:700;">${fmt(lineTotal)}</span>
           </div>
@@ -861,6 +1012,9 @@ async function shareInvoicePdf(inv){
       </div>
       <div style="display:flex; justify-content:space-between; font-size:15.5px; color:#B5542A; font-weight:700; margin-top:6px;">
         <span>متبقي</span><span>${fmt(remaining)}</span>
+      </div>
+      <div style="position:absolute; bottom:24px; left:40px; right:40px; border-top:2px solid #1F5C4F; padding-top:10px; text-align:left;">
+        <div style="font-size:12px; color:#5B6B63;">للاستفسار يرجى التواصل على 01092250491</div>
       </div>
     `;
 
@@ -969,24 +1123,145 @@ document.getElementById('addItemStockBtn').addEventListener('click', ()=>openSto
 document.getElementById('stockSearchInput').addEventListener('input', ()=>render());
 document.getElementById('cancelStockBtn').addEventListener('click', ()=>stockOverlay.classList.remove('open'));
 
+// ---------- Excel stock import ----------
+document.getElementById('importExcelBtn').addEventListener('click', ()=>{
+  document.getElementById('importExcelInput').click();
+});
+
+document.getElementById('importExcelInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){
+    alert('تعذر تحميل خاصية قراءة ملفات Excel. تأكد من اتصالك بالإنترنت وجرب تاني.');
+    return;
+  }
+
+  try{
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+
+    // find the header row by scanning the first ~15 rows for recognizable column names
+    const nameCandidates = ['اسم الصنف','الصنف','اسم المنتج','item name','name'];
+    const codeCandidates = ['رقم الصنف','كود الصنف','item code','code','رقم المنتج'];
+    const qtyCandidates = ['قطعة','الكمية','الرصيد','رصيد','qty','quantity','balance'];
+    const cartonCandidates = ['كارتونة','كرتونة','carton'];
+
+    function findCol(headerRow, candidates){
+      for(let i=0;i<headerRow.length;i++){
+        const cell = String(headerRow[i]||'').trim().toLowerCase();
+        if(candidates.some(c=>cell===c.toLowerCase() || cell.includes(c.toLowerCase()))) return i;
+      }
+      return -1;
+    }
+
+    let headerRowIdx = -1, nameIdx=-1, codeIdx=-1, qtyIdx=-1, cartonIdx=-1;
+    for(let r=0; r<Math.min(rows.length, 15); r++){
+      const idx = findCol(rows[r], nameCandidates);
+      if(idx !== -1){
+        headerRowIdx = r; nameIdx = idx;
+        codeIdx = findCol(rows[r], codeCandidates);
+        qtyIdx = findCol(rows[r], qtyCandidates);
+        cartonIdx = findCol(rows[r], cartonCandidates);
+        break;
+      }
+    }
+
+    if(headerRowIdx === -1 || nameIdx === -1 || qtyIdx === -1){
+      alert('تعذر التعرف على أعمدة الملف. تأكد إن فيه عمود لاسم الصنف وعمود للكمية/الرصيد.');
+      return;
+    }
+
+    let updated = 0, added = 0, cartonNote = 0;
+    for(let r=headerRowIdx+1; r<rows.length; r++){
+      const row = rows[r];
+      const name = String(row[nameIdx]||'').trim();
+      if(!name) continue;
+      const code = codeIdx!==-1 ? String(row[codeIdx]||'').trim() : '';
+      const pieceQty = qtyIdx!==-1 ? (parseFloat(row[qtyIdx])||0) : 0;
+      const cartonQty = cartonIdx!==-1 ? (parseFloat(row[cartonIdx])||0) : 0;
+      if(cartonQty>0) cartonNote++;
+
+      let match = null;
+      if(code) match = inventory.find(it=>it.itemCode && it.itemCode===code);
+      if(!match) match = inventory.find(it=>it.name.trim().toLowerCase()===name.toLowerCase());
+
+      if(match){
+        match.pieceQty = pieceQty;
+        match.cartonQty = cartonQty;
+        match.qty = pieceQty + cartonQty*(match.unitsPerCarton||0);
+        if(code && !match.itemCode) match.itemCode = code;
+        updated++;
+      }else{
+        inventory.push({
+          id: uid(), name, itemCode: code, barcode: '', price: 0,
+          unitsPerCarton: 0, pieceQty, cartonQty, qty: pieceQty, alertThreshold: 5
+        });
+        added++;
+      }
+    }
+
+    await saveInventory();
+    render();
+
+    let msg = `تم تحديث رصيد ${updated} صنف موجود`;
+    if(added>0) msg += `، وإضافة ${added} صنف جديد`;
+    msg += ' (بالقطعة والكرتونة).';
+    if(added>0) msg += `\n\nملحوظة: الأصناف الجديدة اتضافت بسعر "0" لأن الملف مفهوش أسعار، ومحتاجة منك تحدد "عدد القطع في الكرتونة" يدويًا لكل صنف لو عايز حساب سعر الكرتونة أوتوماتيك.`;
+    alert(msg);
+  }catch(err){
+    console.error(err);
+    alert('حصل خطأ أثناء قراءة الملف. تأكد إنه ملف Excel أو CSV سليم وجرب تاني.');
+  }
+});
+
 function openStockForm(stockId){
   editingStockId = stockId || null;
   const it = stockId ? inventory.find(x=>x.id===stockId) : null;
   document.getElementById('stockFormTitle').textContent = it ? 'تعديل الصنف' : 'إضافة صنف للمخزون';
   document.getElementById('stockName').value = it ? it.name : '';
+  document.getElementById('stockItemCode').value = it && it.itemCode ? it.itemCode : '';
   document.getElementById('stockBarcode').value = it && it.barcode ? it.barcode : '';
   document.getElementById('stockPrice').value = it ? it.price : '';
-  document.getElementById('stockQty').value = it ? it.qty : '';
+  document.getElementById('stockUnitsPerCarton').value = it && it.unitsPerCarton ? it.unitsPerCarton : '';
+  document.getElementById('stockPieceQty').value = it ? (it.pieceQty!==undefined ? it.pieceQty : it.qty||0) : '';
+  document.getElementById('stockCartonQty').value = it && it.cartonQty!==undefined ? it.cartonQty : '';
   document.getElementById('stockAlertThreshold').value = it && it.alertThreshold!==undefined ? it.alertThreshold : 5;
+  document.getElementById('deleteStockFormBtn').style.display = it ? 'block' : 'none';
+  updateCartonPriceHint();
   stockOverlay.classList.add('open');
 }
+
+function updateCartonPriceHint(){
+  const price = parseFloat(document.getElementById('stockPrice').value)||0;
+  const upc = parseFloat(document.getElementById('stockUnitsPerCarton').value)||0;
+  const hint = document.getElementById('cartonPriceHint');
+  hint.textContent = (price>0 && upc>0) ? `سعر الكرتونة هيبقى تلقائيًا: ${fmt(price*upc)}` : '';
+}
+document.getElementById('stockPrice').addEventListener('input', updateCartonPriceHint);
+document.getElementById('stockUnitsPerCarton').addEventListener('input', updateCartonPriceHint);
+
+document.getElementById('deleteStockFormBtn').addEventListener('click', async ()=>{
+  if(!editingStockId) return;
+  if(confirm('هل تريد حذف هذا الصنف من المخزون؟')){
+    inventory = inventory.filter(i=>i.id!==editingStockId);
+    await saveInventory();
+    stockOverlay.classList.remove('open');
+    render();
+  }
+});
 
 document.getElementById('saveStockBtn').addEventListener('click', async ()=>{
   const name = document.getElementById('stockName').value.trim();
   if(!name){ alert('من فضلك اكتب اسم الصنف'); return; }
+  const itemCode = document.getElementById('stockItemCode').value.trim();
   const barcode = document.getElementById('stockBarcode').value.trim();
   const price = parseFloat(document.getElementById('stockPrice').value)||0;
-  const qty = parseFloat(document.getElementById('stockQty').value)||0;
+  const unitsPerCarton = parseFloat(document.getElementById('stockUnitsPerCarton').value)||0;
+  const pieceQty = parseFloat(document.getElementById('stockPieceQty').value)||0;
+  const cartonQty = parseFloat(document.getElementById('stockCartonQty').value)||0;
   const alertThreshold = parseFloat(document.getElementById('stockAlertThreshold').value)||0;
 
   if(barcode){
@@ -999,9 +1274,17 @@ document.getElementById('saveStockBtn').addEventListener('click', async ()=>{
 
   if(editingStockId){
     const it = inventory.find(x=>x.id===editingStockId);
-    if(it){ it.name=name; it.barcode=barcode; it.price=price; it.qty=qty; it.alertThreshold=alertThreshold; }
+    if(it){
+      it.name=name; it.itemCode=itemCode; it.barcode=barcode; it.price=price;
+      it.unitsPerCarton=unitsPerCarton; it.pieceQty=pieceQty; it.cartonQty=cartonQty;
+      it.alertThreshold=alertThreshold;
+      it.qty = pieceQty + cartonQty*unitsPerCarton; // kept for backward compatibility
+    }
   }else{
-    inventory.unshift({ id: uid(), name, barcode, price, qty, alertThreshold });
+    inventory.unshift({
+      id: uid(), name, itemCode, barcode, price, unitsPerCarton,
+      pieceQty, cartonQty, qty: pieceQty + cartonQty*unitsPerCarton, alertThreshold
+    });
   }
   await saveInventory();
   stockOverlay.classList.remove('open');
@@ -1101,7 +1384,9 @@ document.getElementById('settingsBtn').addEventListener('click', ()=>{
   document.getElementById('setCompanyAddress').value = settings.companyAddress;
   document.getElementById('setTheme').value = settings.theme;
   document.getElementById('setLanguage').value = settings.language;
+  document.getElementById('googleClientIdInput').value = settings.googleClientId||'';
   refreshLogoPreview();
+  updateDriveStatusUI();
   settingsOverlay.classList.add('open');
 });
 document.getElementById('cancelSettingsBtn').addEventListener('click', ()=>settingsOverlay.classList.remove('open'));
@@ -1204,6 +1489,194 @@ document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 });
+
+// ---------- Google Drive auto-sync ----------
+let driveTokenClient = null;
+let driveAccessToken = null;
+let driveTokenExpiry = 0;
+let driveAutoBackupTimer = null;
+const DRIVE_FILE_NAME = 'sales-pro-egypt-backup.json';
+
+function updateDriveStatusUI(){
+  const statusEl = document.getElementById('driveStatus');
+  const lastEl = document.getElementById('driveLastBackup');
+  if(!statusEl) return;
+  const connected = driveAccessToken && Date.now() < driveTokenExpiry;
+  statusEl.textContent = connected ? 'الحالة: متصل ✅' : 'الحالة: غير متصل';
+  statusEl.style.color = connected ? 'var(--paid)' : 'var(--ink-soft)';
+  lastEl.textContent = settings.lastBackupAt
+    ? `آخر نسخة احتياطية: ${new Date(settings.lastBackupAt).toLocaleString('en-GB')}`
+    : '';
+}
+
+function initGoogleClient(){
+  if(!settings.googleClientId || typeof google === 'undefined' || !google.accounts) return false;
+  if(driveTokenClient) return true;
+  driveTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: settings.googleClientId,
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    callback: (response)=>{
+      if(response && response.access_token){
+        driveAccessToken = response.access_token;
+        driveTokenExpiry = Date.now() + (response.expires_in||3500)*1000;
+        updateDriveStatusUI();
+        driveInitialSyncCheck();
+      }
+    }
+  });
+  return true;
+}
+
+document.getElementById('connectDriveBtn').addEventListener('click', ()=>{
+  const clientId = document.getElementById('googleClientIdInput').value.trim();
+  if(!clientId){ alert('الصق الـ Google Client ID الأول في الخانة اللي فوق'); return; }
+  settings.googleClientId = clientId;
+  saveSettings();
+  driveTokenClient = null;
+  if(!initGoogleClient()){
+    alert('تعذر تحميل خدمة جوجل. تأكد من اتصالك بالإنترنت وجرب تاني.');
+    return;
+  }
+  driveTokenClient.requestAccessToken({ prompt: 'consent' });
+});
+
+async function ensureValidToken(interactive){
+  if(driveAccessToken && Date.now() < driveTokenExpiry - 60000) return true;
+  if(!initGoogleClient()) return false;
+  return new Promise((resolve)=>{
+    const originalCallback = driveTokenClient.callback;
+    driveTokenClient.callback = (response)=>{
+      if(response && response.access_token){
+        driveAccessToken = response.access_token;
+        driveTokenExpiry = Date.now() + (response.expires_in||3500)*1000;
+        updateDriveStatusUI();
+      }
+      driveTokenClient.callback = originalCallback;
+      resolve(!!(response && response.access_token));
+    };
+    driveTokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+  });
+}
+
+async function driveFindFileId(){
+  if(settings.driveFileId) return settings.driveFileId;
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FILE_NAME}' and trashed=false&spaces=drive&fields=files(id,name)`, {
+    headers: { Authorization: `Bearer ${driveAccessToken}` }
+  });
+  const data = await res.json();
+  if(data.files && data.files.length>0){
+    settings.driveFileId = data.files[0].id;
+    await saveSettings();
+    return settings.driveFileId;
+  }
+  return null;
+}
+
+async function driveUploadBackup(){
+  const ok = await ensureValidToken(false);
+  if(!ok) return;
+  const backup = { exportedAt: new Date().toISOString(), invoices, customers, inventory, collections, settings };
+  const content = JSON.stringify(backup);
+  let fileId = await driveFindFileId();
+
+  const metadata = { name: DRIVE_FILE_NAME, mimeType: 'application/json' };
+  const boundary = '-------314159265358979323846';
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+
+  const url = fileId
+    ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+  const method = fileId ? 'PATCH' : 'POST';
+
+  const res = await fetch(url, {
+    method,
+    headers: { Authorization: `Bearer ${driveAccessToken}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body
+  });
+  const data = await res.json();
+  if(data.id && !fileId){
+    settings.driveFileId = data.id;
+  }
+  settings.lastBackupAt = new Date().toISOString();
+  await saveSettings();
+  updateDriveStatusUI();
+}
+
+function scheduleAutoBackup(){
+  if(!settings.googleClientId) return;
+  clearTimeout(driveAutoBackupTimer);
+  driveAutoBackupTimer = setTimeout(()=>{ driveUploadBackup().catch(err=>console.error(err)); }, 4000);
+}
+
+async function driveDownloadBackup(silentIfEmpty){
+  const ok = await ensureValidToken(!silentIfEmpty);
+  if(!ok) return null;
+  const fileId = await driveFindFileId();
+  if(!fileId) return null;
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${driveAccessToken}` }
+  });
+  if(!res.ok) return null;
+  return await res.json();
+}
+
+async function driveInitialSyncCheck(){
+  // if this device has no local data yet, offer to pull the existing backup automatically
+  if(invoices.length===0 && customers.length===0 && inventory.length===0){
+    const data = await driveDownloadBackup(true);
+    if(data && (data.invoices?.length || data.customers?.length || data.inventory?.length)){
+      invoices = data.invoices||[]; customers = data.customers||[];
+      inventory = data.inventory||[]; collections = data.collections||[];
+      await saveData(); await saveCustomers(); await saveInventory(); await saveCollections();
+      render();
+      alert('تم استرجاع بياناتك تلقائيًا من النسخة الاحتياطية المحفوظة على Google Drive.');
+    }
+  }
+}
+
+document.getElementById('backupNowBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('backupNowBtn');
+  btn.disabled = true; const original = btn.textContent; btn.textContent = 'جارِ الحفظ…';
+  try{
+    if(!settings.googleClientId){ alert('اربط Google Drive الأول'); return; }
+    const ok = await ensureValidToken(true);
+    if(!ok){ alert('تعذر تسجيل الدخول لجوجل. جرب "ربط Google Drive" تاني.'); return; }
+    await driveUploadBackup();
+    updateDriveStatusUI();
+    alert('تم رفع نسخة احتياطية جديدة على Google Drive بنجاح.');
+  }catch(err){
+    console.error(err);
+    alert('حصلت مشكلة أثناء الرفع، جرب تاني.');
+  }finally{
+    btn.disabled = false; btn.textContent = original;
+  }
+});
+
+document.getElementById('restoreFromDriveBtn').addEventListener('click', async ()=>{
+  if(!settings.googleClientId){ alert('اربط Google Drive الأول'); return; }
+  if(!confirm('استرجاع النسخة من Drive هيستبدل كل بياناتك الحالية على الموبايل. تريد المتابعة؟')) return;
+  const btn = document.getElementById('restoreFromDriveBtn');
+  btn.disabled = true; const original = btn.textContent; btn.textContent = 'جارِ الاسترجاع…';
+  try{
+    const ok = await ensureValidToken(true);
+    if(!ok){ alert('تعذر تسجيل الدخول لجوجل.'); return; }
+    const data = await driveDownloadBackup(false);
+    if(!data){ alert('مفيش نسخة احتياطية محفوظة على Drive حتى الآن.'); return; }
+    invoices = data.invoices||[]; customers = data.customers||[];
+    inventory = data.inventory||[]; collections = data.collections||[];
+    await saveData(); await saveCustomers(); await saveInventory(); await saveCollections();
+    render();
+    alert('تم استرجاع البيانات من Google Drive بنجاح.');
+  }catch(err){
+    console.error(err);
+    alert('حصلت مشكلة أثناء الاسترجاع، جرب تاني.');
+  }finally{
+    btn.disabled = false; btn.textContent = original;
+  }
+});
+
 
 // ---------- Daily collections ----------
 const collectionOverlay = document.getElementById('collectionOverlay');
@@ -1438,7 +1911,7 @@ function render(){
   const stockList = document.getElementById('inventoryList');
   const stockSearch = document.getElementById('stockSearchInput').value.trim().toLowerCase();
   const filteredInventory = stockSearch
-    ? inventory.filter(it=>it.name.toLowerCase().includes(stockSearch) || (it.barcode && it.barcode.includes(stockSearch)))
+    ? inventory.filter(it=>it.name.toLowerCase().includes(stockSearch) || (it.barcode && it.barcode.includes(stockSearch)) || (it.itemCode && it.itemCode.includes(stockSearch)))
     : inventory;
 
   if(inventory.length===0){
@@ -1447,23 +1920,20 @@ function render(){
     stockList.innerHTML = `<div class="empty"><div class="glyph">🔍</div><div class="title">لا يوجد صنف بهذا الاسم</div></div>`;
   }else{
     stockList.innerHTML = filteredInventory.map(it=>{
-      const isOut = it.qty<=0;
-      const isLow = !isOut && it.alertThreshold>0 && it.qty<=it.alertThreshold;
+      const pieceQty = it.pieceQty!==undefined ? it.pieceQty : (it.qty||0);
+      const cartonQty = it.cartonQty||0;
+      const totalPieces = pieceQty + cartonQty*(it.unitsPerCarton||0);
+      const isOut = totalPieces<=0;
+      const isLow = !isOut && it.alertThreshold>0 && totalPieces<=it.alertThreshold;
       const badgeClass = isOut ? 'due' : (isLow ? 'due' : 'paid');
-      const badgeText = isOut ? 'نفذت الكمية' : (isLow ? '⚠️ قارب على النفاد: '+fmt(it.qty) : 'متاح: '+fmt(it.qty));
+      let stockLabel = fmt(pieceQty)+' قطعة';
+      if(cartonQty>0) stockLabel += ' + '+fmt(cartonQty)+' كرتونة';
+      const badgeText = isOut ? 'نفذت الكمية' : (isLow ? '⚠️ '+stockLabel : stockLabel);
       return `
-      <div class="card ${isOut||isLow?'due':'paid'}">
-        <div class="row">
-          <div>
-            <div class="name">${it.name}</div>
-            <div class="meta">السعر: ${fmt(it.price)}</div>
-            ${it.barcode ? `<div class="meta" style="font-family:monospace;">📊 ${it.barcode}</div>` : ''}
-            <span class="badge ${badgeClass}">${badgeText}</span>
-          </div>
-          <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
-            <button class="rm-btn" style="font-size:14px; color:var(--ledger);" onclick="openStockForm('${it.id}')">تعديل</button>
-            <button class="rm-btn" onclick="deleteStock('${it.id}')">حذف</button>
-          </div>
+      <div class="card ${isOut||isLow?'due':'paid'}" style="padding:10px 16px; cursor:pointer;" onclick="openStockForm('${it.id}')">
+        <div class="row" style="align-items:center;">
+          <div class="name" style="font-size:14.5px;">${it.name}</div>
+          <span class="badge ${badgeClass}" style="margin-top:0; flex-shrink:0;">${badgeText}</span>
         </div>
       </div>
     `;
