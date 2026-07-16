@@ -632,6 +632,38 @@ document.querySelectorAll('.tab').forEach(t=>{
   });
 });
 
+// ---------- Overlay back-button handling ----------
+// Without this, pressing the phone's back button while a form/modal is open
+// exits the whole app instead of just closing the modal (no browser history entry
+// was ever created for it). We push a history entry each time an overlay opens,
+// and a popstate (back button) pops the most recent one instead of leaving the app.
+let overlayStack = [];
+
+function pushOverlay(el){
+  if(!el) return;
+  el.classList.add('open');
+  overlayStack.push(el);
+  history.pushState({ overlayDepth: overlayStack.length }, '', location.href);
+}
+
+function closeOverlay(el){
+  // called by Cancel/×/Save buttons — go back in history so state stays in sync;
+  // the popstate handler below performs the actual close.
+  if(!el || !el.classList.contains('open')) return;
+  if(overlayStack.length && overlayStack[overlayStack.length-1] === el){
+    history.back();
+  }else{
+    // fallback: overlay wasn't tracked (shouldn't normally happen) — just close it
+    el.classList.remove('open');
+    overlayStack = overlayStack.filter(o=>o!==el);
+  }
+}
+
+window.addEventListener('popstate', ()=>{
+  const el = overlayStack.pop();
+  if(el) el.classList.remove('open');
+});
+
 // ---------- Invoice form ----------
 const invoiceOverlay = document.getElementById('invoiceOverlay');
 const itemsWrap = document.getElementById('itemsWrap');
@@ -809,7 +841,7 @@ function updateTotal(){
 document.getElementById('addItemBtn').addEventListener('click', ()=>addItemRow());
 document.getElementById('fabAdd').addEventListener('click', openInvoiceForm);
 document.getElementById('invoiceSearchInput').addEventListener('input', ()=>render());
-document.getElementById('cancelInvoiceBtn').addEventListener('click', ()=>invoiceOverlay.classList.remove('open'));
+document.getElementById('cancelInvoiceBtn').addEventListener('click', ()=>closeOverlay(invoiceOverlay));
 
 function openInvoiceForm(){
   document.getElementById('invNotes').value='';
@@ -826,7 +858,7 @@ function openInvoiceForm(){
   document.getElementById('custDetailsCard').style.display = 'none';
   document.getElementById('noCustomersHint').style.display = customers.length===0 ? 'block' : 'none';
 
-  invoiceOverlay.classList.add('open');
+  pushOverlay(invoiceOverlay);
 }
 
 document.getElementById('custSelect').addEventListener('change', ()=>{
@@ -906,7 +938,7 @@ document.getElementById('saveInvoiceBtn').addEventListener('click', async ()=>{
   });
   if(stockChanged) await saveInventory();
 
-  invoiceOverlay.classList.remove('open');
+  closeOverlay(invoiceOverlay);
   render();
 });
 
@@ -951,7 +983,7 @@ function openDetail(invId){
     <button class="btn-secondary" id="deleteInvBtn">حذف الفاتورة</button>
     <button class="btn-secondary" id="closeDetailBtn">إغلاق</button>
   `;
-  detailOverlay.classList.add('open');
+  pushOverlay(detailOverlay);
 
   document.getElementById('sharePdfBtn').addEventListener('click', ()=>shareInvoicePdf(inv));
 
@@ -975,7 +1007,7 @@ function openDetail(invId){
       });
       await saveCollections();
 
-      detailOverlay.classList.remove('open');
+      closeOverlay(detailOverlay);
       render();
     });
   }
@@ -983,11 +1015,11 @@ function openDetail(invId){
     if(confirm('هل تريد حذف هذه الفاتورة نهائيًا؟')){
       invoices = invoices.filter(i=>i.id!==invId);
       await saveData();
-      detailOverlay.classList.remove('open');
+      closeOverlay(detailOverlay);
       render();
     }
   });
-  document.getElementById('closeDetailBtn').addEventListener('click', ()=>detailOverlay.classList.remove('open'));
+  document.getElementById('closeDetailBtn').addEventListener('click', ()=>closeOverlay(detailOverlay));
 }
 
 // ---------- PDF export & WhatsApp share ----------
@@ -1116,7 +1148,7 @@ document.getElementById('customerSearchInput').addEventListener('input', ()=>ren
 document.getElementById('regCustSap').addEventListener('input', (e)=>{
   e.target.value = e.target.value.replace(/[^0-9]/g, '');
 });
-document.getElementById('cancelCustomerBtn').addEventListener('click', ()=>customerOverlay.classList.remove('open'));
+document.getElementById('cancelCustomerBtn').addEventListener('click', ()=>closeOverlay(customerOverlay));
 document.getElementById('customerSortSelect').addEventListener('change', ()=>render());
 
 function openCustomerForm(customerId){
@@ -1127,7 +1159,7 @@ function openCustomerForm(customerId){
   document.getElementById('regCustPhone').value = c ? c.phone : '';
   document.getElementById('regCustSap').value = c ? c.sapCode : '';
   document.getElementById('regCustAddress').value = c ? c.address : '';
-  customerOverlay.classList.add('open');
+  pushOverlay(customerOverlay);
 }
 
 document.getElementById('saveCustomerBtn').addEventListener('click', async ()=>{
@@ -1144,7 +1176,7 @@ document.getElementById('saveCustomerBtn').addEventListener('click', async ()=>{
     customers.unshift({ id: uid(), name, phone, sapCode, address });
   }
   await saveCustomers();
-  customerOverlay.classList.remove('open');
+  closeOverlay(customerOverlay);
   render();
 });
 
@@ -1162,7 +1194,7 @@ let editingStockId = null;
 
 document.getElementById('addItemStockBtn').addEventListener('click', ()=>openStockForm());
 document.getElementById('stockSearchInput').addEventListener('input', ()=>render());
-document.getElementById('cancelStockBtn').addEventListener('click', ()=>stockOverlay.classList.remove('open'));
+document.getElementById('cancelStockBtn').addEventListener('click', ()=>closeOverlay(stockOverlay));
 
 // ---------- Excel stock import ----------
 document.getElementById('clearInventoryBtn').addEventListener('click', ()=>{
@@ -1297,7 +1329,7 @@ function openStockForm(stockId){
   document.getElementById('stockAlertThreshold').value = it && it.alertThreshold!==undefined ? it.alertThreshold : 5;
   document.getElementById('deleteStockFormBtn').style.display = it ? 'block' : 'none';
   updateCartonPriceHint();
-  stockOverlay.classList.add('open');
+  pushOverlay(stockOverlay);
 }
 
 function updateCartonPriceHint(){
@@ -1314,7 +1346,7 @@ document.getElementById('deleteStockFormBtn').addEventListener('click', async ()
   if(confirm('هل تريد حذف هذا الصنف من المخزون؟')){
     inventory = inventory.filter(i=>i.id!==editingStockId);
     await saveInventory();
-    stockOverlay.classList.remove('open');
+    closeOverlay(stockOverlay);
     render();
   }
 });
@@ -1353,7 +1385,7 @@ document.getElementById('saveStockBtn').addEventListener('click', async ()=>{
     });
   }
   await saveInventory();
-  stockOverlay.classList.remove('open');
+  closeOverlay(stockOverlay);
   render();
 });
 
@@ -1387,7 +1419,7 @@ async function openScanner(){
   }
   document.getElementById('scannerStatus').textContent = '';
   document.getElementById('barcodeReader').innerHTML = '';
-  scannerOverlay.classList.add('open');
+  pushOverlay(scannerOverlay);
 
   html5QrScanner = new Html5Qrcode('barcodeReader');
   const config = {
@@ -1407,7 +1439,7 @@ async function openScanner(){
       config,
       async (decodedText)=>{
         await stopScanner();
-        scannerOverlay.classList.remove('open');
+        closeOverlay(scannerOverlay);
         if(scanResultHandler) scanResultHandler(decodedText);
       },
       ()=>{ /* ignore per-frame scan failures */ }
@@ -1434,7 +1466,7 @@ document.getElementById('scanBarcodeBtn').addEventListener('click', ()=>{
 
 document.getElementById('cancelScanBtn').addEventListener('click', async ()=>{
   await stopScanner();
-  scannerOverlay.classList.remove('open');
+  closeOverlay(scannerOverlay);
 });
 
 // ---------- Settings ----------
@@ -1460,9 +1492,9 @@ document.getElementById('settingsBtn').addEventListener('click', ()=>{
   document.getElementById('googleClientIdInput').value = settings.googleClientId||'';
   refreshLogoPreview();
   updateDriveStatusUI();
-  settingsOverlay.classList.add('open');
+  pushOverlay(settingsOverlay);
 });
-document.getElementById('cancelSettingsBtn').addEventListener('click', ()=>settingsOverlay.classList.remove('open'));
+document.getElementById('cancelSettingsBtn').addEventListener('click', ()=>closeOverlay(settingsOverlay));
 
 document.getElementById('setCompanyLogo').addEventListener('change', (e)=>{
   const file = e.target.files[0];
@@ -1490,7 +1522,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async ()=>{
   await saveSettings();
   applyTheme();
   applyLanguage();
-  settingsOverlay.classList.remove('open');
+  closeOverlay(settingsOverlay);
   render();
 });
 
@@ -1528,7 +1560,7 @@ document.getElementById('restoreFileInput').addEventListener('change', (e)=>{
       if(data.settings) settings = { ...settings, ...data.settings };
       await saveData(); await saveCustomers(); await saveInventory(); await saveCollections(); await saveSettings();
       applyTheme(); applyLanguage();
-      settingsOverlay.classList.remove('open');
+      closeOverlay(settingsOverlay);
       render();
       alert('تم استيراد النسخة الاحتياطية بنجاح');
     }catch(err){
@@ -1766,9 +1798,9 @@ document.getElementById('addCollectionBtn').addEventListener('click', ()=>{
   document.getElementById('collCustDue').textContent='';
   const names = [...new Set([...customers.map(c=>c.name), ...invoices.map(i=>i.customer)])];
   document.getElementById('collCustList').innerHTML = names.map(n=>`<option value="${n}">`).join('');
-  collectionOverlay.classList.add('open');
+  pushOverlay(collectionOverlay);
 });
-document.getElementById('cancelCollectionBtn').addEventListener('click', ()=>collectionOverlay.classList.remove('open'));
+document.getElementById('cancelCollectionBtn').addEventListener('click', ()=>closeOverlay(collectionOverlay));
 
 document.getElementById('collCustName').addEventListener('input', ()=>{
   const name = document.getElementById('collCustName').value.trim();
@@ -1808,7 +1840,7 @@ document.getElementById('saveCollectionBtn').addEventListener('click', async ()=
   });
   await saveCollections();
 
-  collectionOverlay.classList.remove('open');
+  closeOverlay(collectionOverlay);
   render();
 });
 
