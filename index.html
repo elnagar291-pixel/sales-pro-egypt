@@ -648,8 +648,9 @@ function addItemRow(name='', qty=1, price='', discountPct=0, unit='piece'){
 
   row.innerHTML = `
     <div style="position:relative;">
-      <input type="text" class="item-name-select" placeholder="اكتب اسم الصنف أو اضغط السهم لعرض الكل" autocomplete="off" value="${name}" style="padding-left:38px;">
+      <input type="text" class="item-name-select" placeholder="اكتب اسم الصنف أو اضغط السهم لعرض الكل" autocomplete="off" value="${name}" style="padding-left:70px;">
       <button type="button" class="combo-arrow" style="position:absolute; left:6px; top:6px; bottom:6px; width:28px; background:none; border:none; color:var(--ink-soft); font-size:14px; cursor:pointer;">▾</button>
+      <button type="button" class="row-scan-btn" title="مسح باركود" style="position:absolute; left:34px; top:4px; bottom:4px; width:30px; background:var(--ledger); color:#fff; border:none; border-radius:8px; font-size:15px; cursor:pointer;">📷</button>
       <div class="combo-list" style="display:none; position:absolute; z-index:30; background:var(--card); border:1px solid var(--line); border-radius:10px; max-height:240px; overflow-y:auto; width:100%; margin-top:4px; box-shadow:0 6px 18px rgba(0,0,0,.18);"></div>
     </div>
     <div class="item-match-hint meta" style="margin-top:4px;"></div>
@@ -764,6 +765,18 @@ function addItemRow(name='', qty=1, price='', discountPct=0, unit='piece'){
   discountSelect.addEventListener('change', updateTotal);
   row.querySelectorAll('.item-row input').forEach(i=>i.addEventListener('input', updateTotal));
   row.querySelector('.rm-btn').addEventListener('click', ()=>{ row.remove(); updateTotal(); });
+  row.querySelector('.row-scan-btn').addEventListener('click', ()=>{
+    scanResultHandler = (decodedText)=>{
+      const match = inventory.find(it=>it.barcode===decodedText);
+      if(match){
+        nameInput.value = match.name;
+        refreshMatch();
+      }else{
+        showToast(`لا يوجد صنف مسجّل بهذا الباركود (${decodedText}).`, 'error');
+      }
+    };
+    openScanner();
+  });
   itemsWrap.appendChild(row);
 
   refreshMatch();
@@ -1185,16 +1198,20 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
     const codeCandidates = ['رقم الصنف','كود الصنف','item code','code','رقم المنتج'];
     const qtyCandidates = ['قطعة','الكمية','الرصيد','رصيد','qty','quantity','balance'];
     const cartonCandidates = ['كارتونة','كرتونة','carton'];
+    const priceCandidates = ['سعر القطعة الواحدة','سعر القطعة','السعر','سعر البيع','price'];
+    const unitsCandidates = ['عدد القطع في الكرتونه','عدد القطع في الكرتونة','قطع بالكرتونة','عدد القطع بالكرتونة','units per carton'];
 
     function findCol(headerRow, candidates){
-      for(let i=0;i<headerRow.length;i++){
-        const cell = String(headerRow[i]||'').trim().toLowerCase();
-        if(candidates.some(c=>cell===c.toLowerCase() || cell.includes(c.toLowerCase()))) return i;
-      }
+      const cells = headerRow.map(h=>String(h||'').trim().toLowerCase());
+      const lc = candidates.map(c=>c.toLowerCase());
+      // pass 1: exact match (avoids e.g. 'قطعة' matching inside 'سعر القطعة الواحدة')
+      for(let i=0;i<cells.length;i++){ if(lc.includes(cells[i])) return i; }
+      // pass 2: substring match, fallback
+      for(let i=0;i<cells.length;i++){ if(lc.some(c=>cells[i].includes(c))) return i; }
       return -1;
     }
 
-    let headerRowIdx = -1, nameIdx=-1, codeIdx=-1, qtyIdx=-1, cartonIdx=-1;
+    let headerRowIdx = -1, nameIdx=-1, codeIdx=-1, qtyIdx=-1, cartonIdx=-1, priceIdx=-1, unitsIdx=-1;
     for(let r=0; r<Math.min(rows.length, 15); r++){
       const idx = findCol(rows[r], nameCandidates);
       if(idx !== -1){
@@ -1202,6 +1219,8 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
         codeIdx = findCol(rows[r], codeCandidates);
         qtyIdx = findCol(rows[r], qtyCandidates);
         cartonIdx = findCol(rows[r], cartonCandidates);
+        priceIdx = findCol(rows[r], priceCandidates);
+        unitsIdx = findCol(rows[r], unitsCandidates);
         break;
       }
     }
@@ -1219,6 +1238,8 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
       const code = codeIdx!==-1 ? String(row[codeIdx]||'').trim() : '';
       const pieceQty = qtyIdx!==-1 ? (parseFloat(row[qtyIdx])||0) : 0;
       const cartonQty = cartonIdx!==-1 ? (parseFloat(row[cartonIdx])||0) : 0;
+      const filePrice = priceIdx!==-1 ? (parseFloat(row[priceIdx])||0) : null;
+      const fileUnits = unitsIdx!==-1 ? (parseFloat(row[unitsIdx])||0) : null;
       if(cartonQty>0) cartonNote++;
 
       let match = null;
@@ -1228,13 +1249,19 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
       if(match){
         match.pieceQty = pieceQty;
         match.cartonQty = cartonQty;
-        match.qty = pieceQty + cartonQty*(match.unitsPerCarton||0);
         if(code && !match.itemCode) match.itemCode = code;
+        // only touch price / unitsPerCarton if this file actually has those columns —
+        // a plain balance-only file (no price/units columns) leaves them untouched
+        if(filePrice !== null) match.price = filePrice;
+        if(fileUnits !== null) match.unitsPerCarton = fileUnits;
+        match.qty = pieceQty + cartonQty*(match.unitsPerCarton||0);
         updated++;
       }else{
         inventory.push({
-          id: uid(), name, itemCode: code, barcode: '', price: 0,
-          unitsPerCarton: 0, pieceQty, cartonQty, qty: pieceQty, alertThreshold: 5
+          id: uid(), name, itemCode: code, barcode: '',
+          price: filePrice !== null ? filePrice : 0,
+          unitsPerCarton: fileUnits !== null ? fileUnits : 0,
+          pieceQty, cartonQty, qty: pieceQty + cartonQty*(fileUnits||0), alertThreshold: 5
         });
         added++;
       }
@@ -1245,8 +1272,10 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
 
     let msg = `تم تحديث رصيد ${updated} صنف موجود`;
     if(added>0) msg += `، وإضافة ${added} صنف جديد`;
-    msg += ' (بالقطعة والكرتونة).';
-    if(added>0) msg += `\n\nملحوظة: الأصناف الجديدة اتضافت بسعر "0" لأن الملف مفهوش أسعار، ومحتاجة منك تحدد "عدد القطع في الكرتونة" يدويًا لكل صنف لو عايز حساب سعر الكرتونة أوتوماتيك.`;
+    msg += ' (بالقطعة والكرتونة';
+    if(priceIdx!==-1 || unitsIdx!==-1) msg += '، والسعر وعدد القطع في الكرتونة';
+    msg += ').';
+    if(added>0 && priceIdx===-1) msg += `\n\nملحوظة: الأصناف الجديدة اتضافت بسعر "0" لأن الملف مفهوش أسعار.`;
     showToast(msg, 'success');
   }catch(err){
     console.error(err);
@@ -1339,6 +1368,7 @@ async function deleteStock(stockId){
 // ---------- Barcode scanner ----------
 const scannerOverlay = document.getElementById('scannerOverlay');
 let html5QrScanner = null;
+let scanResultHandler = null; // function(decodedText) — set before calling openScanner()
 
 async function stopScanner(){
   if(html5QrScanner){
@@ -1350,7 +1380,7 @@ async function stopScanner(){
   }
 }
 
-document.getElementById('scanBarcodeBtn').addEventListener('click', async ()=>{
+async function openScanner(){
   if(typeof Html5Qrcode === 'undefined'){
     alert('تعذر تحميل خاصية قراءة الباركود. تأكد إن عندك اتصال بالإنترنت وجرب تاني.');
     return;
@@ -1376,17 +1406,9 @@ document.getElementById('scanBarcodeBtn').addEventListener('click', async ()=>{
       { facingMode: 'environment' },
       config,
       async (decodedText)=>{
-        document.getElementById('stockBarcode').value = decodedText;
         await stopScanner();
         scannerOverlay.classList.remove('open');
-
-        // if this barcode already matches an existing item (and we're not already editing it), offer to open it instead
-        const match = inventory.find(it=>it.barcode===decodedText && it.id!==editingStockId);
-        if(match){
-          if(confirm(`الصنف "${match.name}" مسجّل بنفس الباركود ده. تريد فتح بياناته لتحديث الكمية بدل إضافة صنف جديد؟`)){
-            openStockForm(match.id);
-          }
-        }
+        if(scanResultHandler) scanResultHandler(decodedText);
       },
       ()=>{ /* ignore per-frame scan failures */ }
     );
@@ -1394,6 +1416,20 @@ document.getElementById('scanBarcodeBtn').addEventListener('click', async ()=>{
     console.error(err);
     document.getElementById('scannerStatus').textContent = 'تعذر تشغيل الكاميرا. تأكد إنك سمحت للموقع بالوصول للكاميرا من إعدادات المتصفح.';
   }
+}
+
+document.getElementById('scanBarcodeBtn').addEventListener('click', ()=>{
+  scanResultHandler = async (decodedText)=>{
+    document.getElementById('stockBarcode').value = decodedText;
+    // if this barcode already matches an existing item (and we're not already editing it), offer to open it instead
+    const match = inventory.find(it=>it.barcode===decodedText && it.id!==editingStockId);
+    if(match){
+      if(confirm(`الصنف "${match.name}" مسجّل بنفس الباركود ده. تريد فتح بياناته لتحديث الكمية بدل إضافة صنف جديد؟`)){
+        openStockForm(match.id);
+      }
+    }
+  };
+  openScanner();
 });
 
 document.getElementById('cancelScanBtn').addEventListener('click', async ()=>{
