@@ -454,6 +454,11 @@
     </div>
 
     <div style="border-top:1px solid var(--line); margin-top:20px; padding-top:16px;">
+      <label style="margin-top:0; color:var(--due);">⚠️ منطقة خطر</label>
+      <button class="btn-secondary" id="clearInventoryBtn" style="color:var(--due); border-color:var(--due);">🗑️ حذف كل أصناف المخزون</button>
+    </div>
+
+    <div style="border-top:1px solid var(--line); margin-top:20px; padding-top:16px;">
       <label style="margin-top:0;">☁️ المزامنة التلقائية مع Google Drive</label>
       <div class="meta" id="driveStatus">غير متصل</div>
       <div class="meta" id="driveLastBackup"></div>
@@ -1147,6 +1152,15 @@ document.getElementById('stockSearchInput').addEventListener('input', ()=>render
 document.getElementById('cancelStockBtn').addEventListener('click', ()=>stockOverlay.classList.remove('open'));
 
 // ---------- Excel stock import ----------
+document.getElementById('clearInventoryBtn').addEventListener('click', ()=>{
+  if(confirm(`سيتم حذف كل أصناف المخزون نهائيًا (${inventory.length} صنف). هل أنت متأكد؟`)){
+    inventory = [];
+    saveInventory();
+    render();
+    showToast('تم حذف كل أصناف المخزون بنجاح.', 'success');
+  }
+});
+
 document.getElementById('importExcelBtn').addEventListener('click', ()=>{
   document.getElementById('importExcelInput').click();
 });
