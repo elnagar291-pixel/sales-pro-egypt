@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Stock Update - El-Nagar Storage</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --paper:#f4f1ea; --card:#ffffff; --ink:#2b2b28; --ink-soft:#6b6b63;
+    --line:#e4e0d6; --paid:#2f7d5c; --paid-soft:#e7f3ec; --due:#b3452c;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;
+    background:var(--paper); color:var(--ink); min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; padding:24px 16px 60px;
+  }
+  header{ text-align:center; margin-bottom:24px; }
+  header h1{ font-size:22px; margin:0 0 4px; }
+  header p{ color:var(--ink-soft); margin:0; font-size:14px; }
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:24px; width:100%; max-width:420px; text-align:center;
+  }
+  .upload-btn{
+    display:block; width:100%; padding:22px 16px; margin-top:8px;
+    background:var(--paid-soft); color:var(--paid); border:2px dashed var(--paid);
+    border-radius:14px; font-size:17px; font-weight:600; cursor:pointer;
+  }
+  .upload-btn:active{ opacity:.85; }
+  #fileInput{ display:none; }
+  .status{
+    margin-top:18px; padding:14px; border-radius:12px; font-size:14px;
+    line-height:1.7; white-space:pre-line; display:none;
+  }
+  .status.success{ display:block; background:var(--paid-soft); color:var(--paid); }
+  .status.error{ display:block; background:#fbe9e4; color:var(--due); }
+  .status.loading{ display:block; background:#eee; color:var(--ink-soft); }
+  .count{ margin-top:16px; color:var(--ink-soft); font-size:13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📦 Stock Balance Update</h1>
+  <p>El-Nagar Storage — Upload Excel file to update quantities only</p>
+</header>
+
+<div class="card">
+  <button class="upload-btn" id="uploadBtn">📥 اختر ملف Excel وارفعه</button>
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+  <div class="status" id="status"></div>
+  <div class="count" id="count"></div>
+</div>
+
+<script>
+function loadInventory(){
+  try{
+    const raw = localStorage.getItem('ledger_inventory');
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveInventory(inv){
+  localStorage.setItem('ledger_inventory', JSON.stringify(inv));
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+function setStatus(message, type){
+  const el = document.getElementById('status');
+  el.textContent = message;
+  el.className = 'status ' + type;
+}
+
+function refreshCount(){
+  const inv = loadInventory();
+  document.getElementById('count').textContent = `عدد الأصناف الحالي بالمخزون: ${inv.length}`;
+}
+refreshCount();
+
+document.getElementById('uploadBtn').addEventListener('click', ()=>{
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+
+  if(typeof XLSX === 'undefined'){
+    setStatus('تعذر تحميل خاصية قراءة ملفات Excel. تأكد من اتصالك بالإنترنت وجرب تاني.', 'error');
+    return;
+  }
+
+  setStatus('جاري تحديث الرصيد...', 'loading');
+
+  try{
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+
+    const nameCandidates = ['اسم الصنف','الصنف','اسم المنتج','item name','name'];
+    const codeCandidates = ['رقم الصنف','كود الصنف','item code','code','رقم المنتج'];
+    const qtyCandidates = ['قطعة','الكمية','الرصيد','رصيد','qty','quantity','balance'];
+    const cartonCandidates = ['كارتونة','كرتونة','carton'];
+    const priceCandidates = ['سعر القطعة الواحدة','سعر القطعة','السعر','سعر البيع','price'];
+    const unitsCandidates = ['عدد القطع في الكرتونه','عدد القطع في الكرتونة','قطع بالكرتونة','عدد القطع بالكرتونة','units per carton'];
+
+    function findCol(headerRow, candidates){
+      const cells = headerRow.map(h=>String(h||'').trim().toLowerCase());
+      const lc = candidates.map(c=>c.toLowerCase());
+      for(let i=0;i<cells.length;i++){ if(lc.includes(cells[i])) return i; }
+      for(let i=0;i<cells.length;i++){ if(lc.some(c=>cells[i].includes(c))) return i; }
+      return -1;
+    }
+
+    let headerRowIdx = -1, nameIdx=-1, codeIdx=-1, qtyIdx=-1, cartonIdx=-1, priceIdx=-1, unitsIdx=-1;
+    for(let r=0; r<Math.min(rows.length, 15); r++){
+      const idx = findCol(rows[r], nameCandidates);
+      if(idx !== -1){
+        headerRowIdx = r; nameIdx = idx;
+        codeIdx = findCol(rows[r], codeCandidates);
+        qtyIdx = findCol(rows[r], qtyCandidates);
+        cartonIdx = findCol(rows[r], cartonCandidates);
+        priceIdx = findCol(rows[r], priceCandidates);
+        unitsIdx = findCol(rows[r], unitsCandidates);
+        break;
+      }
+    }
+
+    if(headerRowIdx === -1 || nameIdx === -1 || qtyIdx === -1){
+      setStatus('تعذر التعرف على أعمدة الملف. تأكد إن فيه عمود لاسم الصنف وعمود للكمية/الرصيد.', 'error');
+      return;
+    }
+
+    const inventory = loadInventory();
+    let updated = 0, added = 0;
+
+    for(let r=headerRowIdx+1; r<rows.length; r++){
+      const row = rows[r];
+      const name = String(row[nameIdx]||'').trim();
+      if(!name) continue;
+      const code = codeIdx!==-1 ? String(row[codeIdx]||'').trim() : '';
+      const pieceQty = qtyIdx!==-1 ? (parseFloat(row[qtyIdx])||0) : 0;
+      const cartonQty = cartonIdx!==-1 ? (parseFloat(row[cartonIdx])||0) : 0;
+      const filePrice = priceIdx!==-1 ? (parseFloat(row[priceIdx])||0) : null;
+      const fileUnits = unitsIdx!==-1 ? (parseFloat(row[unitsIdx])||0) : null;
+
+      let match = null;
+      if(code) match = inventory.find(it=>it.itemCode && it.itemCode===code);
+      if(!match) match = inventory.find(it=>it.name.trim().toLowerCase()===name.toLowerCase());
+
+      if(match){
+        match.pieceQty = pieceQty;
+        match.cartonQty = cartonQty;
+        if(code && !match.itemCode) match.itemCode = code;
+        if(filePrice !== null) match.price = filePrice;
+        if(fileUnits !== null) match.unitsPerCarton = fileUnits;
+        match.qty = pieceQty + cartonQty*(match.unitsPerCarton||0);
+        updated++;
+      }else{
+        inventory.push({
+          id: uid(), name, itemCode: code, barcode: '',
+          price: filePrice !== null ? filePrice : 0,
+          unitsPerCarton: fileUnits !== null ? fileUnits : 0,
+          pieceQty, cartonQty, qty: pieceQty + cartonQty*(fileUnits||0), alertThreshold: 5
+        });
+        added++;
+      }
+    }
+
+    saveInventory(inventory);
+    refreshCount();
+
+    let msg = `✅ تم تحديث رصيد ${updated} صنف موجود`;
+    if(added>0) msg += `، وإضافة ${added} صنف جديد`;
+    msg += '.';
+    setStatus(msg, 'success');
+  }catch(err){
+    console.error(err);
+    setStatus('حصل خطأ أثناء قراءة الملف. تأكد إنه ملف Excel أو CSV سليم وجرب تاني.', 'error');
+  }
+});
+</script>
+</body>
+</html>
