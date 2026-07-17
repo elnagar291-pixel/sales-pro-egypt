@@ -4,6 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
 <title>Stock Update - El-Nagar Storage</title>
+<script>
+(function(){
+  var APP_VERSION = '2026-07-17-2';
+  try{
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(data && data.version && data.version !== APP_VERSION){
+          var lastReloadedTo = sessionStorage.getItem('reloaded_to_version');
+          if(lastReloadedTo !== data.version){
+            sessionStorage.setItem('reloaded_to_version', data.version);
+            var url = new URL(window.location.href);
+            url.searchParams.set('v', data.version);
+            window.location.replace(url.toString());
+          }
+        }
+      })
+      .catch(function(){});
+  }catch(e){}
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
