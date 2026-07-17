@@ -52,6 +52,7 @@
   <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
   <div class="status" id="status"></div>
   <div class="count" id="count"></div>
+  <div class="count" id="lastUpdate"></div>
 </div>
 
 <script>
@@ -77,6 +78,20 @@ function refreshCount(){
   document.getElementById('count').textContent = `عدد الأصناف الحالي بالمخزون: ${inv.length}`;
 }
 refreshCount();
+
+function formatLastUpdate(iso){
+  const d = new Date(iso);
+  const datePart = d.toLocaleDateString('ar-EG', { year:'numeric', month:'2-digit', day:'2-digit' });
+  const timePart = d.toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+  return `${datePart} - ${timePart}`;
+}
+
+function refreshLastUpdate(){
+  const iso = localStorage.getItem('ledger_inventory_last_update');
+  const el = document.getElementById('lastUpdate');
+  el.textContent = iso ? `آخر تحديث: ${formatLastUpdate(iso)}` : 'لسه معملتش أي تحديث من هنا';
+}
+refreshLastUpdate();
 
 document.getElementById('uploadBtn').addEventListener('click', ()=>{
   document.getElementById('fileInput').click();
@@ -171,7 +186,9 @@ document.getElementById('fileInput').addEventListener('change', async (e)=>{
     }
 
     saveInventory(inventory);
+    localStorage.setItem('ledger_inventory_last_update', new Date().toISOString());
     refreshCount();
+    refreshLastUpdate();
 
     let msg = `✅ تم تحديث رصيد ${updated} صنف موجود`;
     if(added>0) msg += `، وإضافة ${added} صنف جديد`;
