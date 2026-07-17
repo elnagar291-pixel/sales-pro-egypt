@@ -12,7 +12,7 @@
 // cache-busting URL so the latest deployed code is picked up automatically
 // — no more manual "clear cache" steps needed after each update.
 (function(){
-  var APP_VERSION = '2026-07-17-2';
+  var APP_VERSION = '2026-07-17-4';
   try{
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
       .then(function(r){ return r.json(); })
@@ -399,6 +399,9 @@
 
     <label>🎁 بونص قطع مجانية لكل كرتونة (اختياري)</label>
     <input type="number" id="stockBonusQty" placeholder="مثال: 2 — يتضاف تلقائي حسب عدد الكراتين في الفاتورة" min="0">
+
+    <label>🎁 اسم صنف البونص (اختياري — لو فاضي هيبقى نفس الصنف)</label>
+    <input type="text" id="stockBonusItemName" placeholder="مثال: ريموت ازرق — لو البونص صنف مختلف عن الصنف المباع">
 
     <button class="btn-primary" id="saveStockBtn">حفظ الصنف</button>
     <button class="btn-secondary" id="cancelStockBtn">إلغاء</button>
@@ -799,7 +802,10 @@ function addItemRow(name='', qty=1, price='', discountPct=0, unit='piece'){
       let availText = fmt(pieceQty)+' قطعة';
       if(cartonQty>0) availText += ' / '+fmt(cartonQty)+' كرتونة';
       hint.textContent = `✅ متاح: ${availText}`;
-      if(match.bonusQty>0) hint.textContent += ` — 🎁 بونص ${fmt(match.bonusQty)} قطعة لكل كرتونة (يتحسب أوتوماتيك حسب الكمية)`;
+      if(match.bonusQty>0){
+        const bonusLabel = match.bonusItemName ? `${match.bonusQty} قطعة من "${match.bonusItemName}"` : `${match.bonusQty} قطعة من نفس الصنف`;
+        hint.textContent += ` — 🎁 بونص ${bonusLabel} لكل كرتونة (يتحسب أوتوماتيك حسب الكمية)`;
+      }
       hint.style.color = 'var(--paid)';
       unitSelect.style.display = match.unitsPerCarton>0 ? 'block' : 'none';
       if(match.unitsPerCarton<=0) unitSelect.value = 'piece';
@@ -933,12 +939,15 @@ document.getElementById('saveInvoiceBtn').addEventListener('click', async ()=>{
     if(name && qty>0){
       const lineTotal = qty*price*(1-discountPct/100);
       const match = inventory.find(it=>it.name.trim().toLowerCase()===name.trim().toLowerCase());
-      let bonusQty = 0;
+      items.push({name, qty, price, discountPct, lineTotal, unit});
       if(match && match.bonusQty>0){
         const cartonsInRow = unit==='carton' ? qty : (match.unitsPerCarton>0 ? qty/match.unitsPerCarton : 0);
-        bonusQty = Math.round(match.bonusQty * cartonsInRow);
+        const bonusQty = Math.round(match.bonusQty * cartonsInRow);
+        if(bonusQty>0){
+          const bonusName = match.bonusItemName || match.name;
+          items.push({name: bonusName, qty: bonusQty, price: 0, discountPct: 0, lineTotal: 0, unit: 'piece', isBonus: true});
+        }
       }
-      items.push({name, qty, price, discountPct, lineTotal, unit, bonusQty});
     }
   });
   if(items.length===0){ alert('أضف صنف واحد على الأقل'); return; }
@@ -1013,7 +1022,7 @@ function openDetail(invId){
     <div style="margin-top:14px; border-top:1px solid var(--line); padding-top:10px;">
       ${inv.items.map(it=>`
         <div class="row" style="margin-bottom:6px; font-size:14px;">
-          <span>${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.discountPct>0 ? ' (خصم '+it.discountPct+'%)' : ''}${it.bonusQty>0 ? ' <span style="color:var(--paid);">🎁+'+fmt(it.bonusQty)+' بونص</span>' : ''}</span>
+          <span>${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.discountPct>0 ? ' (خصم '+it.discountPct+'%)' : ''}${it.isBonus ? ' <span style="color:var(--paid); font-weight:700;">🎁 بونص</span>' : ''}</span>
           <span>${fmt(it.lineTotal!==undefined ? it.lineTotal : it.qty*it.price)}</span>
         </div>
       `).join('')}
@@ -1117,7 +1126,7 @@ async function shareInvoicePdf(inv){
           const discountPct = it.discountPct || 0;
           return `
           <div style="display:flex; justify-content:space-between; font-size:15px; margin-bottom:10px;">
-            <span style="flex:2;">${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.bonusQty>0 ? ' <span style="color:#2f7d5c; font-size:12px;">(🎁+'+fmt(it.bonusQty)+' بونص)</span>' : ''}</span>
+            <span style="flex:2;">${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.isBonus ? ' <span style="color:#2f7d5c; font-weight:700;">(🎁 بونص)</span>' : ''}</span>
             <span style="flex:1; text-align:center; color:#5B6B63;">${fmt(subtotal)}</span>
             <span style="flex:1; text-align:center; color:${discountPct>0?'#B5542A':'#5B6B63'};">${discountPct>0 ? discountPct+'%' : '—'}</span>
             <span style="flex:1; text-align:left; font-weight:700;">${fmt(lineTotal)}</span>
@@ -1285,6 +1294,7 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
     const priceCandidates = ['سعر القطعة الواحدة','سعر القطعة','السعر','سعر البيع','price'];
     const unitsCandidates = ['عدد القطع في الكرتونه','عدد القطع في الكرتونة','قطع بالكرتونة','عدد القطع بالكرتونة','units per carton'];
     const bonusCandidates = ['بونص لكل كرتونة','بونص الكرتونة','بونص','البونص','bonus per carton','bonus'];
+    const bonusItemCandidates = ['اسم صنف البونص','صنف البونص','bonus item'];
 
     function findCol(headerRow, candidates){
       const cells = headerRow.map(h=>String(h||'').trim().toLowerCase());
@@ -1296,7 +1306,7 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
       return -1;
     }
 
-    let headerRowIdx = -1, nameIdx=-1, codeIdx=-1, qtyIdx=-1, cartonIdx=-1, priceIdx=-1, unitsIdx=-1, bonusIdx=-1;
+    let headerRowIdx = -1, nameIdx=-1, codeIdx=-1, qtyIdx=-1, cartonIdx=-1, priceIdx=-1, unitsIdx=-1, bonusIdx=-1, bonusItemIdx=-1;
     for(let r=0; r<Math.min(rows.length, 15); r++){
       const idx = findCol(rows[r], nameCandidates);
       if(idx !== -1){
@@ -1307,6 +1317,7 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
         priceIdx = findCol(rows[r], priceCandidates);
         unitsIdx = findCol(rows[r], unitsCandidates);
         bonusIdx = findCol(rows[r], bonusCandidates);
+        bonusItemIdx = findCol(rows[r], bonusItemCandidates);
         break;
       }
     }
@@ -1327,6 +1338,7 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
       const filePrice = priceIdx!==-1 ? (parseFloat(row[priceIdx])||0) : null;
       const fileUnits = unitsIdx!==-1 ? (parseFloat(row[unitsIdx])||0) : null;
       const fileBonus = bonusIdx!==-1 ? (parseFloat(row[bonusIdx])||0) : null;
+      const fileBonusItem = bonusItemIdx!==-1 ? String(row[bonusItemIdx]||'').trim() : null;
       if(cartonQty>0) cartonNote++;
 
       let match = null;
@@ -1342,6 +1354,7 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
         if(filePrice !== null) match.price = filePrice;
         if(fileUnits !== null) match.unitsPerCarton = fileUnits;
         if(fileBonus !== null) match.bonusQty = fileBonus;
+        if(fileBonusItem !== null && fileBonusItem) match.bonusItemName = fileBonusItem;
         match.qty = pieceQty + cartonQty*(match.unitsPerCarton||0);
         updated++;
       }else{
@@ -1350,6 +1363,7 @@ document.getElementById('importExcelInput').addEventListener('change', async (e)
           price: filePrice !== null ? filePrice : 0,
           unitsPerCarton: fileUnits !== null ? fileUnits : 0,
           bonusQty: fileBonus !== null ? fileBonus : 0,
+          bonusItemName: fileBonusItem || '',
           pieceQty, cartonQty, qty: pieceQty + cartonQty*(fileUnits||0), alertThreshold: 5
         });
         added++;
@@ -1388,6 +1402,7 @@ function openStockForm(stockId){
   document.getElementById('stockCartonQty').value = it && it.cartonQty!==undefined ? it.cartonQty : '';
   document.getElementById('stockAlertThreshold').value = it && it.alertThreshold!==undefined ? it.alertThreshold : 5;
   document.getElementById('stockBonusQty').value = it && it.bonusQty ? it.bonusQty : '';
+  document.getElementById('stockBonusItemName').value = it && it.bonusItemName ? it.bonusItemName : '';
   document.getElementById('deleteStockFormBtn').style.display = it ? 'block' : 'none';
   updateCartonPriceHint();
   pushOverlay(stockOverlay);
@@ -1423,6 +1438,7 @@ document.getElementById('saveStockBtn').addEventListener('click', async ()=>{
   const cartonQty = parseFloat(document.getElementById('stockCartonQty').value)||0;
   const alertThreshold = parseFloat(document.getElementById('stockAlertThreshold').value)||0;
   const bonusQty = parseFloat(document.getElementById('stockBonusQty').value)||0;
+  const bonusItemName = document.getElementById('stockBonusItemName').value.trim();
 
   if(barcode){
     const duplicate = inventory.find(it=>it.barcode===barcode && it.id!==editingStockId);
@@ -1437,13 +1453,13 @@ document.getElementById('saveStockBtn').addEventListener('click', async ()=>{
     if(it){
       it.name=name; it.itemCode=itemCode; it.barcode=barcode; it.price=price;
       it.unitsPerCarton=unitsPerCarton; it.pieceQty=pieceQty; it.cartonQty=cartonQty;
-      it.alertThreshold=alertThreshold; it.bonusQty=bonusQty;
+      it.alertThreshold=alertThreshold; it.bonusQty=bonusQty; it.bonusItemName=bonusItemName;
       it.qty = pieceQty + cartonQty*unitsPerCarton; // kept for backward compatibility
     }
   }else{
     inventory.unshift({
       id: uid(), name, itemCode, barcode, price, unitsPerCarton,
-      pieceQty, cartonQty, qty: pieceQty + cartonQty*unitsPerCarton, alertThreshold, bonusQty
+      pieceQty, cartonQty, qty: pieceQty + cartonQty*unitsPerCarton, alertThreshold, bonusQty, bonusItemName
     });
   }
   await saveInventory();
