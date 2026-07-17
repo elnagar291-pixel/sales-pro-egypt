@@ -12,7 +12,7 @@
 // cache-busting URL so the latest deployed code is picked up automatically
 // — no more manual "clear cache" steps needed after each update.
 (function(){
-  var APP_VERSION = '2026-07-17-5';
+  var APP_VERSION = '2026-07-17-7';
   try{
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
       .then(function(r){ return r.json(); })
@@ -850,6 +850,9 @@ function addItemRow(name='', qty=1, price='', discountPct=0, unit='piece'){
   });
 
   unitSelect.addEventListener('change', ()=>{ applyUnitPrice(findMatch()); updateTotal(); });
+  row.querySelectorAll('input[type="number"]').forEach(i=>{
+    i.addEventListener('focus', ()=>{ i.select(); });
+  });
   discountSelect.addEventListener('change', updateTotal);
   row.querySelectorAll('.item-row input').forEach(i=>i.addEventListener('input', updateTotal));
   row.querySelector('.rm-btn').addEventListener('click', ()=>{ row.remove(); updateTotal(); });
@@ -1027,7 +1030,7 @@ function openDetail(invId){
     <div style="margin-top:14px; border-top:1px solid var(--line); padding-top:10px;">
       ${inv.items.map(it=>`
         <div class="row" style="margin-bottom:6px; font-size:14px;">
-          <span>${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.discountPct>0 ? ' (خصم '+it.discountPct+'%)' : ''}${it.isBonus ? ' <span style="color:var(--paid); font-weight:700;">🎁 بونص</span>' : ''}</span>
+          <span>${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.discountPct>0 ? ' (خصم '+it.discountPct+'%)' : ''}${it.isBonus ? ' <span style="color:var(--paid); font-weight:700;">(بونص)</span>' : ''}</span>
           <span>${fmt(it.lineTotal!==undefined ? it.lineTotal : it.qty*it.price)}</span>
         </div>
       `).join('')}
@@ -1131,7 +1134,7 @@ async function shareInvoicePdf(inv){
           const discountPct = it.discountPct || 0;
           return `
           <div style="display:flex; justify-content:space-between; font-size:15px; margin-bottom:10px;">
-            <span style="flex:2;">${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.isBonus ? ' <span style="color:#2f7d5c; font-weight:700;">(🎁 بونص)</span>' : ''}</span>
+            <span style="flex:2;">${it.name} × ${it.qty}${it.unit==='carton'?' كرتونة':''}${it.isBonus ? ' <span style="color:#2f7d5c; font-weight:700;">(بونص)</span>' : ''}</span>
             <span style="flex:1; text-align:center; color:#5B6B63;">${fmt(subtotal)}</span>
             <span style="flex:1; text-align:center; color:${discountPct>0?'#B5542A':'#5B6B63'};">${discountPct>0 ? discountPct+'%' : '—'}</span>
             <span style="flex:1; text-align:left; font-weight:700;">${fmt(lineTotal)}</span>
