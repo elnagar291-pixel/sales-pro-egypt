@@ -38,6 +38,19 @@
   .status.error{ display:block; background:#fbe9e4; color:var(--due); }
   .status.loading{ display:block; background:#eee; color:var(--ink-soft); }
   .count{ margin-top:16px; color:var(--ink-soft); font-size:13px; }
+  .item-list{ margin-top:20px; text-align:right; border-top:1px solid var(--line); }
+  .item-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:9px 2px; border-bottom:1px solid var(--line); font-size:14px;
+  }
+  .item-row .item-name{
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:right;
+  }
+  .item-row .item-qty{ color:var(--paid); font-weight:600; white-space:nowrap; flex-shrink:0; }
+  .search-box{
+    width:100%; padding:10px 12px; margin-top:16px; border:1px solid var(--line);
+    border-radius:10px; font-size:14px; font-family:inherit;
+  }
 </style>
 </head>
 <body>
@@ -53,6 +66,8 @@
   <div class="status" id="status"></div>
   <div class="count" id="count"></div>
   <div class="count" id="lastUpdate"></div>
+  <input type="text" class="search-box" id="searchBox" placeholder="ابحث عن صنف...">
+  <div class="item-list" id="itemList"></div>
 </div>
 
 <script>
@@ -92,6 +107,25 @@ function refreshLastUpdate(){
   el.textContent = iso ? `آخر تحديث: ${formatLastUpdate(iso)}` : 'لسه معملتش أي تحديث من هنا';
 }
 refreshLastUpdate();
+
+function renderList(filter){
+  const inv = loadInventory();
+  const q = (filter||'').trim().toLowerCase();
+  const list = q ? inv.filter(it=>it.name.toLowerCase().includes(q)) : inv;
+  const sorted = [...list].sort((a,b)=>a.name.localeCompare(b.name, 'ar'));
+
+  const wrap = document.getElementById('itemList');
+  if(sorted.length===0){
+    wrap.innerHTML = '<div class="item-row" style="justify-content:center; color:var(--ink-soft);">لا توجد أصناف مطابقة</div>';
+    return;
+  }
+  wrap.innerHTML = sorted.map(it=>{
+    const p = it.pieceQty||0, c = it.cartonQty||0;
+    return `<div class="item-row"><span class="item-name">${it.name}</span><span class="item-qty">${p} قطعة، ${c}ك</span></div>`;
+  }).join('');
+}
+renderList('');
+document.getElementById('searchBox').addEventListener('input', (e)=>renderList(e.target.value));
 
 document.getElementById('uploadBtn').addEventListener('click', ()=>{
   document.getElementById('fileInput').click();
@@ -189,6 +223,7 @@ document.getElementById('fileInput').addEventListener('change', async (e)=>{
     localStorage.setItem('ledger_inventory_last_update', new Date().toISOString());
     refreshCount();
     refreshLastUpdate();
+    renderList(document.getElementById('searchBox').value);
 
     let msg = `✅ تم تحديث رصيد ${updated} صنف موجود`;
     if(added>0) msg += `، وإضافة ${added} صنف جديد`;
