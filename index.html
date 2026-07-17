@@ -12,7 +12,7 @@
 // cache-busting URL so the latest deployed code is picked up automatically
 // — no more manual "clear cache" steps needed after each update.
 (function(){
-  var APP_VERSION = '2026-07-17-9';
+  var APP_VERSION = '2026-07-17-10';
   try{
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
       .then(function(r){ return r.json(); })
@@ -1146,7 +1146,7 @@ async function shareInvoicePdf(inv){
     const totalDiscount = inv.items.reduce((s,it)=>s+((it.qty*it.price) - (it.lineTotal!==undefined?it.lineTotal:it.qty*it.price)),0);
     const tpl = document.getElementById('printTemplate');
     tpl.innerHTML = `
-      ${settings.companyLogo ? `<img src="${settings.companyLogo}" style="position:absolute; top:50%; left:50%; width:480px; transform:translate(-50%,-50%) rotate(-25deg); opacity:0.06; z-index:0; pointer-events:none;">` : ''}
+      ${settings.companyLogo ? `<img id="pdfWatermark" src="${settings.companyLogo}" style="position:absolute; top:50%; left:50%; width:520px; transform:translate(-50%,-50%) rotate(-25deg); opacity:0.16; z-index:0; pointer-events:none;">` : ''}
       <div style="position:relative; z-index:1;">
       <div style="position:relative; text-align:center; border-bottom:3px solid #1F5C4F; padding-bottom:16px; margin-bottom:20px;">
         ${settings.companyLogo ? `<img src="${settings.companyLogo}" style="position:absolute; top:0; left:0; height:42px; max-width:130px; object-fit:contain;">` : ''}
@@ -1205,6 +1205,11 @@ async function shareInvoicePdf(inv){
         <div style="font-size:12px; color:#5B6B63;">للاستفسار يرجى التواصل على 01092250491</div>
       </div>
     `;
+
+    // make sure the logo/watermark images have actually finished loading before
+    // html2canvas takes its snapshot — otherwise they can render blank
+    const imgs = Array.from(tpl.querySelectorAll('img'));
+    await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(res => { img.onload = res; img.onerror = res; })));
 
     const canvas = await html2canvas(tpl, { scale: 2, backgroundColor: '#ffffff' });
     const imgData = canvas.toDataURL('image/png');
