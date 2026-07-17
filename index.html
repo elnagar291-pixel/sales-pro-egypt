@@ -12,7 +12,7 @@
 // cache-busting URL so the latest deployed code is picked up automatically
 // — no more manual "clear cache" steps needed after each update.
 (function(){
-  var APP_VERSION = '2026-07-17-7';
+  var APP_VERSION = '2026-07-17-9';
   try{
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
       .then(function(r){ return r.json(); })
@@ -220,6 +220,49 @@
 </style>
 </head>
 <body>
+
+<div id="licenseGate" style="position:fixed; inset:0; z-index:999999; background:#f4f1ea; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; font-family:'Cairo','Tajawal',-apple-system,sans-serif;">
+  <div style="font-size:40px; margin-bottom:12px;">🔒</div>
+  <div id="licenseGateMsg" style="font-size:16px; color:#6b6b63; max-width:320px; line-height:1.8;">جاري التحقق من الترخيص...</div>
+</div>
+<style>
+  /* while the license gate is checking/blocking, hide the rest of the app */
+  body.license-pending > *:not(#licenseGate),
+  body.license-blocked > *:not(#licenseGate){ display:none !important; }
+</style>
+<script>
+(function(){
+  // Each deployed copy of this app has its own LICENSE_CODE. To hand a new
+  // copy to someone else, change this string and add a matching entry
+  // (set to true) in the central licenses.json file. Setting their entry to
+  // false (or removing it) blocks that copy next time it loads — no need
+  // to touch their device at all.
+  var LICENSE_CODE = 'elnagar-main';
+  var LICENSE_SERVER = 'https://elnagar291-pixel.github.io/sales-pro-egypt/licenses.json';
+
+  document.body.classList.add('license-pending');
+
+  fetch(LICENSE_SERVER + '?t=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var allowed = data && data.licenses && data.licenses[LICENSE_CODE] === true;
+      if(allowed){
+        document.body.classList.remove('license-pending');
+        document.getElementById('licenseGate').remove();
+      }else{
+        document.getElementById('licenseGateMsg').textContent = 'الترخيص متوقف. برجاء التواصل مع الدعم الفني.';
+        document.body.classList.remove('license-pending');
+        document.body.classList.add('license-blocked');
+      }
+    })
+    .catch(function(){
+      // couldn't reach the license server (offline, etc.) — fail OPEN so a shop
+      // owner isn't locked out by a bad connection; just let the app continue.
+      document.body.classList.remove('license-pending');
+      document.getElementById('licenseGate').remove();
+    });
+})();
+</script>
 
 <div id="appToast" onclick="this.classList.remove('show')"></div>
 
@@ -1103,6 +1146,8 @@ async function shareInvoicePdf(inv){
     const totalDiscount = inv.items.reduce((s,it)=>s+((it.qty*it.price) - (it.lineTotal!==undefined?it.lineTotal:it.qty*it.price)),0);
     const tpl = document.getElementById('printTemplate');
     tpl.innerHTML = `
+      ${settings.companyLogo ? `<img src="${settings.companyLogo}" style="position:absolute; top:50%; left:50%; width:480px; transform:translate(-50%,-50%) rotate(-25deg); opacity:0.06; z-index:0; pointer-events:none;">` : ''}
+      <div style="position:relative; z-index:1;">
       <div style="position:relative; text-align:center; border-bottom:3px solid #1F5C4F; padding-bottom:16px; margin-bottom:20px;">
         ${settings.companyLogo ? `<img src="${settings.companyLogo}" style="position:absolute; top:0; left:0; height:42px; max-width:130px; object-fit:contain;">` : ''}
         <div style="font-size:24px; font-weight:800;">${settings.companyName || 'اسم الشركة'}</div>
@@ -1154,6 +1199,7 @@ async function shareInvoicePdf(inv){
       </div>
       <div style="display:flex; justify-content:space-between; font-size:15.5px; color:#B5542A; font-weight:700; margin-top:6px;">
         <span>متبقي</span><span>${fmt(remaining)}</span>
+      </div>
       </div>
       <div style="position:absolute; bottom:24px; left:40px; right:40px; border-top:2px solid #1F5C4F; padding-top:10px; text-align:left;">
         <div style="font-size:12px; color:#5B6B63;">للاستفسار يرجى التواصل على 01092250491</div>
