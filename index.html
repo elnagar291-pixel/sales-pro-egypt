@@ -239,7 +239,6 @@
   <div class="tab" data-tab="customers" id="tabCustomers" style="white-space:nowrap;">العملاء</div>
   <div class="tab" data-tab="items" id="tabItems" style="white-space:nowrap;">الأصناف</div>
   <div class="tab" data-tab="myStock" id="tabMyStock" style="white-space:nowrap;">مخزني</div>
-  <div class="tab" data-tab="loading" id="tabLoading" style="white-space:nowrap;">أذون التحميل</div>
   <div class="tab" data-tab="collections" id="tabCollections" style="white-space:nowrap;">التحصيل</div>
 </div>
 
@@ -268,7 +267,7 @@
   </div>
   <div class="section" id="itemsSection">
     <div class="card" style="margin-bottom:12px;">
-      <div class="row"><div><div class="name">📦 الأصناف</div><div class="meta">هنا تسجل أصناف الشركة وأسعارها فقط. الرصيد بيتحسب تلقائيًا من أذون التحميل والفواتير.</div></div><button class="add-item" id="addMasterItemBtn">+ إضافة صنف</button></div>
+      <div class="row"><div><div class="name">📦 الأصناف</div><div class="meta">هنا تسجل أصناف الشركة وأسعارها فقط. الرصيد بتعدله من تبويب مخزني، وبيتخصم تلقائيًا مع الفواتير.</div></div><button class="add-item" id="addMasterItemBtn">+ إضافة صنف</button></div>
     </div>
     <input type="text" id="itemMasterSearch" placeholder="ابحث باسم الصنف أو الكود..." style="margin-bottom:12px;">
     <div id="itemsMasterList" class="loading"></div>
@@ -327,18 +326,6 @@
     <div id="myStockSummary" class="grid" style="margin-bottom:12px;"></div>
     <input type="text" id="myStockSearch" placeholder="ابحث باسم الصنف..." style="margin-bottom:12px;">
     <div id="myStockList" class="loading"></div>
-  </div>
-
-  <div class="section" id="loadingSection">
-    <div class="card" style="margin-bottom:12px;">
-      <div class="row"><div><div class="name">🚚 أذون التحميل</div><div class="meta">كل تحميل للعربية بيزود رصيد مخزني تلقائيًا.</div></div><button class="add-item" id="addLoadingBtn">+ إذن تحميل جديد</button></div>
-    </div>
-    <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:130px;"><label>من تاريخ</label><input type="date" id="loadingFromDate"></div>
-      <div style="flex:1;min-width:130px;"><label>إلى تاريخ</label><input type="date" id="loadingToDate"></div>
-      <button class="btn-secondary" id="clearLoadingFilterBtn" style="align-self:end;">مسح</button>
-    </div>
-    <div id="loadingList"></div>
   </div>
 
   <div class="section" id="inventorySection" style="display:none!important;">
@@ -539,17 +526,6 @@
   </div>
 </div>
 
-<!-- Loading permit modal -->
-<div class="overlay" id="loadingOverlay">
-  <div class="modal">
-    <h3>إذن تحميل جديد</h3>
-    <label>رقم الإذن</label><input id="loadPermitNo" placeholder="مثال: 2026-001">
-    <label>تاريخ التحميل</label><input type="date" id="loadPermitDate">
-    <div id="loadItemsWrap"></div>
-    <button class="add-item" id="addLoadItemBtn">+ إضافة صنف</button>
-    <div class="modal-actions"><button class="btn-secondary" id="cancelLoadingBtn">إلغاء</button><button class="btn-primary" id="saveLoadingBtn">حفظ إذن التحميل</button></div>
-  </div>
-</div>
 
 <!-- Old compact item modal kept hidden for backward compatibility -->
 <div class="overlay" id="masterItemOverlay" style="display:none!important;">
@@ -558,6 +534,22 @@
 
 <!-- Hidden invoice print template (used to render PDF) -->
 <div id="printTemplate" style="position:fixed; left:-9999px; top:0; width:700px; background:#fff; padding:40px; font-family:'Tajawal', sans-serif; direction:rtl; color:#22302B;"></div>
+
+<!-- Stock edit -->
+<div class="overlay" id="stockEditOverlay">
+  <div class="sheet">
+    <h3 id="stkTitle"></h3>
+    <div class="meta" id="stkCurrent"></div>
+    <div id="stkCartonsWrap"><label>عدد الكراتين</label><input type="number" id="stkCartons" min="0" step="1" inputmode="numeric"></div>
+    <label>عدد القطع</label><input type="number" id="stkPieces" min="0" step="1" inputmode="numeric">
+    <div class="meta" id="stkPerCarton" style="margin-top:6px;"></div>
+    <div id="stkTotal" style="margin-top:10px; font-weight:700; color:var(--ledger);"></div>
+    <div style="display:flex; gap:8px; margin-top:16px;">
+      <button class="btn-secondary" id="stkCancel" type="button">إلغاء</button>
+      <button class="btn-primary" id="stkSave" type="button">حفظ الرصيد</button>
+    </div>
+  </div>
+</div>
 
 <!-- Item picker -->
 <div class="overlay" id="itemPicker">
@@ -604,7 +596,7 @@ const translations = {
     tabInvoices: 'الفواتير',
     tabCustomers: 'العملاء',
     tabInventory: 'المخزون',
-    tabItems:'الأصناف', tabMyStock:'مخزني', tabLoading:'أذون التحميل',
+    tabItems:'الأصناف', tabMyStock:'مخزني',
     tabCollections: 'التحصيل',
     fabAdd: '+ فاتورة جديدة'
   },
@@ -617,7 +609,7 @@ const translations = {
     tabInvoices: 'Invoices',
     tabCustomers: 'Customers',
     tabInventory: 'Inventory',
-    tabItems:'Items', tabMyStock:'My Stock', tabLoading:'Loading Permits',
+    tabItems:'Items', tabMyStock:'My Stock',
     tabCollections: 'Collections',
     fabAdd: '+ New Invoice'
   }
@@ -1241,7 +1233,6 @@ let editingStockId = null;
 document.getElementById('addItemStockBtn').addEventListener('click', ()=>openStockForm());
 document.getElementById('stockSearchInput').addEventListener('input', ()=>render());
 ['itemMasterSearch','myStockSearch'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>renderIntegratedInventory()));
-['loadingFromDate','loadingToDate'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('change', ()=>renderIntegratedInventory()); });
 document.getElementById('cancelStockBtn').addEventListener('click', ()=>stockOverlay.classList.remove('open'));
 
 // ---------- Excel stock import ----------
@@ -1688,14 +1679,12 @@ document.getElementById('clearCollFilterBtn').addEventListener('click', ()=>{
 
 // ---------- Integrated inventory / loading permits ----------
 function getStockBalance(itemId){
-  return stockMovements.filter(m=>m.itemId===itemId).reduce((s,m)=>s+(m.type==='load'?m.qty:-m.qty),0);
+  return stockMovements.filter(m=>m.itemId===itemId).reduce((s,m)=>s+((m.type==='load'||m.type==='adjust')?m.qty:-m.qty),0);
 }
 function getLoadedQty(itemId){ return stockMovements.filter(m=>m.itemId===itemId && m.type==='load').reduce((s,m)=>s+m.qty,0); }
 function getSoldQty(itemId){ return stockMovements.filter(m=>m.itemId===itemId && m.type==='sale').reduce((s,m)=>s+m.qty,0); }
 function ensureMasterItem(it){ return it && it.id; }
 
-const loadingOverlay=document.getElementById('loadingOverlay');
-const loadItemsWrap=document.getElementById('loadItemsWrap');
 const masterItemOverlay=document.getElementById('masterItemOverlay');
 let editingMasterItemId=null;
 
@@ -1735,7 +1724,7 @@ function openMasterItemForm(id){
   document.getElementById('editItemLoadUnit').value=it?it.defaultLoadUnit||'piece':'piece';
   document.getElementById('editItemAlertThreshold').value=it?(it.alertThreshold||0):0;
   const balance=it?getStockBalance(it.id):0;
-  document.getElementById('editItemStockInfo').textContent=`الرصيد الحالي: ${fmt(balance)} قطعة — لا يتم تعديل الرصيد من هنا، وإنما من أذون التحميل والفواتير.`;
+  document.getElementById('editItemStockInfo').textContent=`الرصيد الحالي: ${fmt(balance)} قطعة — لتعديل الرصيد ادخل تبويب مخزني.`;
   updateEditCartonPrice();
   showItemEditPage();
 }
@@ -1772,16 +1761,83 @@ document.getElementById('saveItemEditBtn').onclick=async()=>{
   closeItemEditPage();
 };
 
+
+// ---------- تعديل رصيد "مخزني" بالكرتونة والقطعة ----------
+function splitStock(it, total){
+  const upc = it.unitsPerCarton||0;
+  if(upc>0){ const c=Math.floor(total/upc); return {cartons:c, pieces:total-c*upc}; }
+  return {cartons:0, pieces:total};
+}
+function formatStockQty(it, total){
+  const upc = it.unitsPerCarton||0;
+  if(upc>0){ const sp=splitStock(it,total); return fmt(sp.cartons)+' كرتونة'+(sp.pieces?(' + '+fmt(sp.pieces)+' قطعة'):''); }
+  return fmt(total)+' قطعة';
+}
+let editingStockBalId=null;
+function stockEditTarget(){
+  const it=inventory.find(x=>x.id===editingStockBalId); if(!it) return 0;
+  const upc=it.unitsPerCarton||0;
+  const c=upc>0?(parseFloat(document.getElementById('stkCartons').value)||0):0;
+  const p=parseFloat(document.getElementById('stkPieces').value)||0;
+  return c*upc+p;
+}
+function updateStockEditPreview(){
+  const it=inventory.find(x=>x.id===editingStockBalId); if(!it) return;
+  document.getElementById('stkTotal').textContent='الإجمالي: '+fmt(stockEditTarget())+' قطعة';
+}
+function openStockEdit(id){
+  const it=inventory.find(x=>x.id===id); if(!it) return;
+  editingStockBalId=id;
+  const b=getStockBalance(id); const sp=splitStock(it,b);
+  const upc=it.unitsPerCarton||0;
+  document.getElementById('stkTitle').textContent=it.name;
+  document.getElementById('stkCurrent').textContent='الرصيد الحالي: '+formatStockQty(it,b);
+  document.getElementById('stkCartonsWrap').style.display=upc>0?'block':'none';
+  document.getElementById('stkCartons').value=upc>0?sp.cartons:0;
+  document.getElementById('stkPieces').value=sp.pieces;
+  document.getElementById('stkPerCarton').textContent=upc>0?('الكرتونة = '+fmt(upc)+' قطعة'):'الصنف ده مفيهوش عدد قطع في الكرتونة، فالرصيد بالقطعة بس (تقدر تحدده من تبويب الأصناف).';
+  updateStockEditPreview();
+  document.getElementById('stockEditOverlay').classList.add('open');
+}
+function closeStockEdit(){ document.getElementById('stockEditOverlay').classList.remove('open'); editingStockBalId=null; }
+document.getElementById('stkCartons').addEventListener('input',updateStockEditPreview);
+document.getElementById('stkPieces').addEventListener('input',updateStockEditPreview);
+document.getElementById('stkCancel').addEventListener('click',closeStockEdit);
+document.getElementById('stockEditOverlay').addEventListener('click',e=>{ if(e.target.id==='stockEditOverlay') closeStockEdit(); });
+document.getElementById('stkSave').addEventListener('click',async()=>{
+  const it=inventory.find(x=>x.id===editingStockBalId); if(!it) return;
+  const target=stockEditTarget();
+  if(target<0){ alert('الرصيد مينفعش يكون بالسالب'); return; }
+  const delta=target-getStockBalance(it.id);
+  if(delta!==0){
+    stockMovements.push({id:uid(), itemId:it.id, itemName:it.name, type:'adjust', qty:delta, date:new Date().toISOString(), note:'تعديل رصيد يدوي'});
+    await saveMovements();
+  }
+  closeStockEdit();
+  render();
+});
+
 function renderIntegratedInventory(){
   const q=(document.getElementById('itemMasterSearch').value||'').trim().toLowerCase(); const ml=document.getElementById('itemsMasterList');
   const arr=inventory.filter(i=>matchQ(q,i.name,i.itemCode||''));
   ml.innerHTML=arr.length?arr.map(it=>`<div class="card"><div class="row"><div><div class="name">${it.name}</div><div class="meta">${it.itemCode?'كود: '+it.itemCode+' · ':''}سعر القطعة: ${fmt(it.price||0)}${it.unitsPerCarton>0?' · '+fmt(it.unitsPerCarton)+' قطعة/كرتونة':''}</div>${it.unitsPerCarton>0?`<div class="meta">سعر الكرتونة: ${fmt((it.price||0)*it.unitsPerCarton)}</div>`:''}</div><button class="rm-btn" onclick="openMasterItemForm('${it.id}')">تعديل</button></div></div>`).join(''):'<div class="empty">لا توجد أصناف مسجلة.</div>';
   const sq=(document.getElementById('myStockSearch').value||'').trim().toLowerCase(); const sl=document.getElementById('myStockList'); const arr2=inventory.filter(i=>matchQ(sq,i.name));
   const totalValue=arr2.reduce((s,i)=>s+getStockBalance(i.id)*(i.price||0),0); document.getElementById('myStockSummary').innerHTML=`<div class="stat-card"><div class="num">${fmt(arr2.reduce((s,i)=>s+getStockBalance(i.id),0))}</div><div class="lbl">إجمالي القطع بالمخزن</div></div><div class="stat-card"><div class="num">${fmt(totalValue)}</div><div class="lbl">قيمة مخزني بسعر البيع</div></div>`;
-  sl.innerHTML=arr2.length?arr2.map(it=>{const b=getStockBalance(it.id);const loaded=getLoadedQty(it.id),sold=getSoldQty(it.id);return `<div class="card ${b<=0?'due':'paid'}"><div class="row"><div><div class="name">${it.name}</div><div class="meta">تحميل: ${fmt(loaded)} · مبيعات: ${fmt(sold)}</div></div><div class="amount ${b<=0?'due':'paid'}">${fmt(b)} قطعة</div></div></div>`}).join(''):'<div class="empty">لا توجد أصناف.</div>';
-  const from=document.getElementById('loadingFromDate').value,to=document.getElementById('loadingToDate').value; const ll=document.getElementById('loadingList');
-  const lp=loadingPermits.filter(p=>(!from||p.date>=from)&&(!to||p.date<=to));
-  ll.innerHTML=lp.length?lp.map(p=>`<div class="card paid"><div class="row"><div><div class="name">إذن تحميل #${p.number}</div><div class="meta">${new Date(p.date).toLocaleDateString('en-GB')} · ${p.items.length} صنف</div></div><div style="text-align:left">${p.items.map(x=>{const it=inventory.find(i=>i.id===x.itemId);return `<div class="meta">${it?it.name:'صنف محذوف'} × ${fmt(x.qty)}</div>`}).join('')}</div></div></div>`).join(''):'<div class="empty">لا توجد أذون تحميل في الفترة المحددة.</div>';
+  sl.innerHTML='';
+  if(!arr2.length){ sl.innerHTML='<div class="empty">لا توجد أصناف. سجّل الأصناف أولًا من تبويب الأصناف.</div>'; }
+  arr2.forEach(it=>{
+    const b=getStockBalance(it.id);
+    const card=document.createElement('div'); card.className='card '+(b<=0?'due':'paid'); card.style.cursor='pointer';
+    const row=document.createElement('div'); row.className='row';
+    const left=document.createElement('div');
+    const nm=document.createElement('div'); nm.className='name'; nm.textContent=it.name;
+    const mt=document.createElement('div'); mt.className='meta'; mt.textContent='اضغط لتعديل الرصيد';
+    left.appendChild(nm); left.appendChild(mt);
+    const am=document.createElement('div'); am.className='amount '+(b<=0?'due':'paid'); am.textContent=formatStockQty(it,b);
+    row.appendChild(left); row.appendChild(am); card.appendChild(row);
+    card.addEventListener('click',()=>openStockEdit(it.id));
+    sl.appendChild(card);
+  });
 }
 
 // ---------- Render ----------
