@@ -571,6 +571,20 @@
 
 <script>
 const fmt = n => new Intl.NumberFormat('en-US').format(Math.round(n*100)/100);
+// بحث عربي مرن: يتجاهل التشكيل والهمزات والتاء المربوطة، ويطابق كل الكلمات بأي ترتيب
+function normAr(t){
+  return String(t==null?'':t).toLowerCase()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g,'')
+    .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه')
+    .replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/\s+/g,' ').trim();
+}
+function matchQ(q, ...fields){
+  const words = normAr(q).split(' ').filter(Boolean);
+  if(!words.length) return true;
+  const hay = normAr(fields.join(' '));
+  return words.every(w=>hay.includes(w));
+}
 let invoices = [];
 let customers = [];
 let inventory = [];
@@ -729,7 +743,7 @@ function renderPicker(){
   const list = document.getElementById('pickerList');
   list.innerHTML = '';
   const items = inventory.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'ar'))
-    .filter(it=>!q || String(it.name).toLowerCase().includes(q) || String(it.itemCode||'').toLowerCase().includes(q));
+    .filter(it=>matchQ(q,it.name,it.itemCode||''));
   if(!items.length){
     const e = document.createElement('div'); e.className='empty';
     e.textContent = inventory.length ? 'لا توجد نتائج مطابقة.' : 'لا توجد أصناف مسجلة. سجّل أصناف من تبويب المخزون.';
@@ -1226,6 +1240,8 @@ let editingStockId = null;
 
 document.getElementById('addItemStockBtn').addEventListener('click', ()=>openStockForm());
 document.getElementById('stockSearchInput').addEventListener('input', ()=>render());
+['itemMasterSearch','myStockSearch'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>renderIntegratedInventory()));
+['loadingFromDate','loadingToDate'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('change', ()=>renderIntegratedInventory()); });
 document.getElementById('cancelStockBtn').addEventListener('click', ()=>stockOverlay.classList.remove('open'));
 
 // ---------- Excel stock import ----------
@@ -1758,9 +1774,9 @@ document.getElementById('saveItemEditBtn').onclick=async()=>{
 
 function renderIntegratedInventory(){
   const q=(document.getElementById('itemMasterSearch').value||'').trim().toLowerCase(); const ml=document.getElementById('itemsMasterList');
-  const arr=inventory.filter(i=>!q||i.name.toLowerCase().includes(q)||(i.itemCode||'').toLowerCase().includes(q));
+  const arr=inventory.filter(i=>matchQ(q,i.name,i.itemCode||''));
   ml.innerHTML=arr.length?arr.map(it=>`<div class="card"><div class="row"><div><div class="name">${it.name}</div><div class="meta">${it.itemCode?'كود: '+it.itemCode+' · ':''}سعر القطعة: ${fmt(it.price||0)}${it.unitsPerCarton>0?' · '+fmt(it.unitsPerCarton)+' قطعة/كرتونة':''}</div>${it.unitsPerCarton>0?`<div class="meta">سعر الكرتونة: ${fmt((it.price||0)*it.unitsPerCarton)}</div>`:''}</div><button class="rm-btn" onclick="openMasterItemForm('${it.id}')">تعديل</button></div></div>`).join(''):'<div class="empty">لا توجد أصناف مسجلة.</div>';
-  const sq=(document.getElementById('myStockSearch').value||'').trim().toLowerCase(); const sl=document.getElementById('myStockList'); const arr2=inventory.filter(i=>!sq||i.name.toLowerCase().includes(sq));
+  const sq=(document.getElementById('myStockSearch').value||'').trim().toLowerCase(); const sl=document.getElementById('myStockList'); const arr2=inventory.filter(i=>matchQ(sq,i.name));
   const totalValue=arr2.reduce((s,i)=>s+getStockBalance(i.id)*(i.price||0),0); document.getElementById('myStockSummary').innerHTML=`<div class="stat-card"><div class="num">${fmt(arr2.reduce((s,i)=>s+getStockBalance(i.id),0))}</div><div class="lbl">إجمالي القطع بالمخزن</div></div><div class="stat-card"><div class="num">${fmt(totalValue)}</div><div class="lbl">قيمة مخزني بسعر البيع</div></div>`;
   sl.innerHTML=arr2.length?arr2.map(it=>{const b=getStockBalance(it.id);const loaded=getLoadedQty(it.id),sold=getSoldQty(it.id);return `<div class="card ${b<=0?'due':'paid'}"><div class="row"><div><div class="name">${it.name}</div><div class="meta">تحميل: ${fmt(loaded)} · مبيعات: ${fmt(sold)}</div></div><div class="amount ${b<=0?'due':'paid'}">${fmt(b)} قطعة</div></div></div>`}).join(''):'<div class="empty">لا توجد أصناف.</div>';
   const from=document.getElementById('loadingFromDate').value,to=document.getElementById('loadingToDate').value; const ll=document.getElementById('loadingList');
@@ -1926,7 +1942,7 @@ function render(){
   const stockList = document.getElementById('inventoryList');
   const stockSearch = document.getElementById('stockSearchInput').value.trim().toLowerCase();
   const filteredInventory = stockSearch
-    ? inventory.filter(it=>it.name.toLowerCase().includes(stockSearch) || (it.barcode && it.barcode.includes(stockSearch)) || (it.itemCode && it.itemCode.includes(stockSearch)))
+    ? inventory.filter(it=>matchQ(stockSearch,it.name,it.barcode||'',it.itemCode||''))
     : inventory;
 
   if(inventory.length===0){
