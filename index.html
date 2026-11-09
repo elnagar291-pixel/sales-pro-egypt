@@ -1101,8 +1101,8 @@ async function shareInvoicePdf(inv){
           <tr style="background:#F6F3EC; color:#5B6B63; font-size:13px; font-weight:700;">
             <th style="width:36%; text-align:right; padding:10px 8px; border-bottom:2px solid #1F5C4F;">الصنف</th>
             <th style="width:13%; text-align:center; padding:10px 4px; border-bottom:2px solid #1F5C4F;">الوحدة</th>
-            <th style="width:17%; text-align:center; padding:10px 4px; border-bottom:2px solid #1F5C4F;">سعر القطعة</th>
             <th style="width:12%; text-align:center; padding:10px 4px; border-bottom:2px solid #1F5C4F;">العدد</th>
+            <th style="width:17%; text-align:center; padding:10px 4px; border-bottom:2px solid #1F5C4F;">سعر القطعة</th>
             <th style="width:22%; text-align:left; padding:10px 8px; border-bottom:2px solid #1F5C4F;">الإجمالي</th>
           </tr>
         </thead>
@@ -1117,8 +1117,8 @@ async function shareInvoicePdf(inv){
           <tr>
             <td style="padding:10px 8px; border-bottom:1px solid #E6E1D3; font-weight:600; word-wrap:break-word;">${it.name}</td>
             <td style="padding:10px 4px; border-bottom:1px solid #E6E1D3; text-align:center;">${isCarton?'كرتونة':'قطعة'}</td>
-            <td style="padding:10px 4px; border-bottom:1px solid #E6E1D3; text-align:center;">${fmt(piecePrice)}</td>
             <td style="padding:10px 4px; border-bottom:1px solid #E6E1D3; text-align:center; font-weight:700;">${fmt(it.qty)}</td>
+            <td style="padding:10px 4px; border-bottom:1px solid #E6E1D3; text-align:center;">${fmt(piecePrice)}</td>
             <td style="padding:10px 8px; border-bottom:1px solid #E6E1D3; text-align:left; font-weight:700;">${fmt(lineTotal)}</td>
           </tr>`;}).join('')}
         </tbody>
