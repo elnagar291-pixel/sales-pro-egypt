@@ -319,6 +319,7 @@
       </div>
       <button class="btn-primary" id="saveItemEditBtn">حفظ بيانات الصنف</button>
       <button class="btn-secondary" id="cancelItemEditBtn">إلغاء</button>
+      <button class="btn-secondary" id="deleteItemEditBtn" type="button" style="display:none; color:var(--due); border-color:var(--due); margin-top:8px;">🗑 حذف الصنف</button>
     </div>
   </div>
 
@@ -1725,6 +1726,7 @@ function openMasterItemForm(id){
   document.getElementById('editItemAlertThreshold').value=it?(it.alertThreshold||0):0;
   const balance=it?getStockBalance(it.id):0;
   document.getElementById('editItemStockInfo').textContent=`الرصيد الحالي: ${fmt(balance)} قطعة — لتعديل الرصيد ادخل تبويب مخزني.`;
+  document.getElementById('deleteItemEditBtn').style.display = it ? 'block' : 'none';
   updateEditCartonPrice();
   showItemEditPage();
 }
@@ -1735,6 +1737,14 @@ document.getElementById('editItemPiecePrice').addEventListener('input',updateEdi
 document.getElementById('editItemUnitsPerCarton').addEventListener('input',updateEditCartonPrice);
 document.getElementById('itemEditBackBtn').onclick=closeItemEditPage;
 document.getElementById('cancelItemEditBtn').onclick=closeItemEditPage;
+document.getElementById('deleteItemEditBtn').onclick=async()=>{
+  const it=inventory.find(x=>x.id===editingMasterItemId); if(!it) return;
+  if(!confirm('هتحذف الصنف "'+it.name+'" ورصيده نهائيًا؟ الفواتير القديمة مش هتتأثر.')) return;
+  inventory=inventory.filter(x=>x.id!==it.id);
+  stockMovements=stockMovements.filter(m=>m.itemId!==it.id);
+  await saveInventory(); await saveMovements();
+  closeItemEditPage();
+};
 document.getElementById('saveItemEditBtn').onclick=async()=>{
   const name=document.getElementById('editItemName').value.trim();
   if(!name){alert('اكتب اسم الصنف');return;}
